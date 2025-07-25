@@ -273,19 +273,28 @@ class ContinuousBitcoinPredictor:
                 
                 final_multiplier = base_multiplier * hourly_variation * noise
                 
-                # Create prediction for this time point
+                # Calculate adjusted volatility for this time point
+                adjusted_volatility = base_prediction['predicted_volatility'] * final_multiplier
+                
+                # Create prediction for this time point with all required database fields
                 prediction = {
                     'sequence_number': i + 1,
                     'timestamp': future_time.isoformat(),
                     'minutes_ahead': (i + 1) * 5,
-                    'predicted_volatility': base_prediction['predicted_volatility'] * final_multiplier,
+                    'predicted_volatility': adjusted_volatility,
                     'predicted_skewness': base_prediction['predicted_skewness'],
                     'predicted_kurtosis': base_prediction['predicted_kurtosis'],
+                    'volatility_annualized': adjusted_volatility * np.sqrt(365 * 24 * 12),  # Annualized volatility
                     'volatility_multiplier': final_multiplier,
                     'hour_utc': hour_utc,
                     'is_us_trading_hours': 14 <= hour_utc <= 21,
                     'is_weekend': future_time.weekday() >= 5,
                     'current_price': base_prediction['current_price'],
+                    'confidence_interval_lower': base_prediction['current_price'] * (1 - 2 * adjusted_volatility),
+                    'confidence_interval_upper': base_prediction['current_price'] * (1 + 2 * adjusted_volatility),
+                    'market_regime': base_prediction.get('market_regime', 'unknown'),
+                    'risk_assessment': base_prediction.get('risk_assessment', 'unknown'),
+                    'prediction_period': '5_minutes',
                     'data_timestamp': start_time.isoformat(),
                     'model_version': self.current_model_version,
                     'prediction_type': 'continuous_5min'
@@ -295,6 +304,7 @@ class ContinuousBitcoinPredictor:
             
             # Calculate summary statistics
             volatilities = [p['predicted_volatility'] for p in predictions]
+            annualized_volatilities = [p['volatility_annualized'] for p in predictions]
             
             result = {
                 'prediction_timestamp': datetime.utcnow().isoformat(),
@@ -308,7 +318,10 @@ class ContinuousBitcoinPredictor:
                     'max_volatility': max(volatilities),
                     'mean_volatility': np.mean(volatilities),
                     'std_volatility': np.std(volatilities),
-                    'volatility_range': max(volatilities) - min(volatilities)
+                    'volatility_range': max(volatilities) - min(volatilities),
+                    'min_volatility_annualized': min(annualized_volatilities),
+                    'max_volatility_annualized': max(annualized_volatilities),
+                    'mean_volatility_annualized': np.mean(annualized_volatilities)
                 }
             }
             
