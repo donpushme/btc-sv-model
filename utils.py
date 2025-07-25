@@ -445,6 +445,36 @@ def create_project_directories():
         os.makedirs(directory, exist_ok=True)
         print(f"Created directory: {directory}")
 
+def safe_torch_load(file_path: str, map_location=None):
+    """
+    Safely load PyTorch model checkpoints, handling PyTorch 2.6+ weights_only changes.
+    
+    Args:
+        file_path: Path to the checkpoint file
+        map_location: Device to load the model on
+        
+    Returns:
+        Loaded checkpoint dictionary
+    """
+    import torch
+    
+    try:
+        # First try with weights_only=False for trusted files
+        return torch.load(file_path, map_location=map_location, weights_only=False)
+    except Exception as e:
+        if "weights_only" in str(e).lower() or "WeightsUnpickler" in str(e):
+            try:
+                # Fallback: Add safe globals for sklearn objects
+                from sklearn.preprocessing import RobustScaler, StandardScaler
+                torch.serialization.add_safe_globals([RobustScaler, StandardScaler])
+                return torch.load(file_path, map_location=map_location)
+            except ImportError:
+                # If sklearn is not available, try loading weights only
+                return torch.load(file_path, map_location=map_location, weights_only=True)
+        else:
+            raise e
+
+
 def check_system_requirements():
     """
     Check system requirements and package versions.

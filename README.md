@@ -366,16 +366,30 @@ Automated risk level classification:
 
 9. **PyTorch 2.6+ weights_only loading error**
    ```bash
-   # If you get "Weights only load failed" or "Unsupported global: sklearn.preprocessing"
-   # This occurs because PyTorch 2.6+ changed default security for torch.load()
-   # The issue is fixed in predictor.py, but if you encounter it elsewhere:
+   # ERROR: "Weights only load failed" or "Unsupported global: sklearn.preprocessing"
+   # CAUSE: PyTorch 2.6+ changed default security for torch.load() to prevent code execution
+   # REASON: Our model checkpoints contain sklearn scalers (RobustScaler, StandardScaler)
    
-   # Option 1: Explicitly allow all objects (for trusted files)
+   # ✅ SOLUTION: Already fixed in the codebase using safe_torch_load() utility
+   # If you encounter this elsewhere in your code:
+   
+   # Option 1: Use our utility function
+   from utils import safe_torch_load
+   checkpoint = safe_torch_load('model.pth', map_location='cpu')
+   
+   # Option 2: Explicitly allow all objects (for trusted files only!)
    checkpoint = torch.load('model.pth', weights_only=False)
    
-   # Option 2: Add safe globals for sklearn objects
-   torch.serialization.add_safe_globals([sklearn.preprocessing.RobustScaler])
+   # Option 3: Add safe globals for specific sklearn classes
+   import torch.serialization
+   from sklearn.preprocessing import RobustScaler, StandardScaler
+   torch.serialization.add_safe_globals([RobustScaler, StandardScaler])
    checkpoint = torch.load('model.pth')
+   
+   # This error is common when:
+   # - Using PyTorch 2.6+ with models trained on older versions
+   # - Loading checkpoints that contain sklearn preprocessing objects
+   # - Switching between different PyTorch versions
    ```
 
 ### Performance Optimization
