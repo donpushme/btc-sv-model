@@ -97,7 +97,11 @@ class DatabaseManager:
             str: Document ID of saved prediction
         """
         try:
-            # Prepare document
+            # Check if this is a batch record (continuous predictions)
+            if prediction.get('prediction_type') == 'continuous_batch':
+                return self.save_prediction_batch(prediction, model_version)
+            
+            # Handle individual predictions (original format)
             doc = {
                 "prediction_timestamp": datetime.utcnow(),
                 "data_timestamp": pd.to_datetime(prediction['timestamp']),
@@ -122,6 +126,44 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"❌ Failed to save prediction: {str(e)}")
+            raise
+    
+    def save_prediction_batch(self, batch_record: Dict, model_version: str = None) -> str:
+        """
+        Save a batch of 288 predictions as a single database record.
+        
+        Args:
+            batch_record: Batch record containing all 288 predictions
+            model_version: Version of the model used
+            
+        Returns:
+            str: Document ID of saved batch record
+        """
+        try:
+            # Prepare batch document
+            doc = {
+                "prediction_timestamp": datetime.utcnow(),
+                "data_timestamp": pd.to_datetime(batch_record['data_timestamp']),
+                "model_version": model_version or "unknown",
+                "batch_id": batch_record['batch_id'],
+                "prediction_type": batch_record['prediction_type'],
+                "current_price": float(batch_record['current_price']),
+                "predictions_count": int(batch_record['predictions_count']),
+                "interval_minutes": int(batch_record.get('interval_minutes', 5)),
+                "prediction_horizon_hours": int(batch_record.get('prediction_horizon_hours', 24)),
+                "source": batch_record.get('source', 'unknown'),
+                "summary_stats": batch_record['summary_stats'],
+                "predictions": batch_record['predictions']  # Array of all 288 predictions
+            }
+            
+            # Insert document
+            result = self.predictions_collection.insert_one(doc)
+            print(f"💾 Saved prediction batch to database: {result.inserted_id}")
+            
+            return str(result.inserted_id)
+            
+        except Exception as e:
+            print(f"❌ Failed to save prediction batch: {str(e)}")
             raise
     
     def save_training_data(self, price_data: pd.DataFrame, data_source: str = "realtime") -> str:

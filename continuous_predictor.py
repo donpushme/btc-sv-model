@@ -334,13 +334,13 @@ class ContinuousBitcoinPredictor:
     
     def save_predictions_to_database(self, prediction_result: Dict) -> str:
         """
-        Save all 288 predictions to database.
+        Save ONE record containing all 288 predictions to database.
         
         Args:
             prediction_result: Result from generate_288_predictions
             
         Returns:
-            Batch ID for the saved predictions
+            Batch ID for the saved prediction record
         """
         if not self.enable_database:
             print("⚠️ Database not enabled, skipping save")
@@ -348,46 +348,36 @@ class ContinuousBitcoinPredictor:
         
         try:
             batch_id = f"continuous_{int(time.time())}"
-            saved_count = 0
             
-            print(f"💾 Saving {len(prediction_result['predictions'])} predictions to database...")
+            print(f"💾 Saving 1 record with {len(prediction_result['predictions'])} predictions to database...")
             
-            # Save each prediction
-            for prediction in prediction_result['predictions']:
-                prediction['batch_id'] = batch_id
-                
-                try:
-                    self.db_manager.save_prediction(
-                        prediction, 
-                        prediction.get('model_version', 'unknown')
-                    )
-                    saved_count += 1
-                except Exception as e:
-                    print(f"⚠️ Failed to save prediction {prediction['sequence_number']}: {str(e)}")
-            
-            # Save batch summary
-            batch_summary = {
+            # Create single record containing all 288 predictions
+            prediction_batch_record = {
                 'batch_id': batch_id,
-                'prediction_type': 'continuous_batch_summary',
+                'prediction_type': 'continuous_batch',
                 'prediction_timestamp': prediction_result['prediction_timestamp'],
                 'data_timestamp': prediction_result['data_timestamp'],
                 'current_price': prediction_result['current_price'],
                 'predictions_count': prediction_result['predictions_count'],
-                'saved_count': saved_count,
                 'summary_stats': prediction_result['summary_stats'],
-                'model_version': prediction_result['predictions'][0].get('model_version', 'unknown')
+                'model_version': prediction_result['predictions'][0].get('model_version', 'unknown'),
+                'predictions': prediction_result['predictions'],  # All 288 predictions as array
+                'source': 'Pyth Network',
+                'interval_minutes': 5,
+                'prediction_horizon_hours': 24
             }
             
+            # Save single record to database
             self.db_manager.save_prediction(
-                batch_summary, 
-                batch_summary.get('model_version', 'unknown')
+                prediction_batch_record, 
+                prediction_batch_record.get('model_version', 'unknown')
             )
             
-            print(f"✅ Saved {saved_count}/{len(prediction_result['predictions'])} predictions with batch ID: {batch_id}")
+            print(f"✅ Saved 1 record containing {len(prediction_result['predictions'])} predictions with batch ID: {batch_id}")
             return batch_id
             
         except Exception as e:
-            print(f"❌ Failed to save predictions to database: {str(e)}")
+            print(f"❌ Failed to save prediction record to database: {str(e)}")
             return None
     
     def predict_and_save(self, price_data: pd.DataFrame, save_to_db: bool = True) -> Dict[str, float]:
@@ -454,7 +444,7 @@ class ContinuousBitcoinPredictor:
             # Update counters
             self.total_predictions_made += prediction_result['predictions_count']
             
-            # Display summary
+                         # Display summary
             stats = prediction_result['summary_stats']
             print(f"\n📊 Cycle Summary:")
             print(f"   Current Price: ${prediction_result['current_price']:,.2f}")
@@ -462,7 +452,8 @@ class ContinuousBitcoinPredictor:
             print(f"   Volatility Range: {stats['min_volatility']:.4f} - {stats['max_volatility']:.4f}")
             print(f"   Mean Volatility: {stats['mean_volatility']:.4f}")
             if batch_id:
-                print(f"   Database Batch ID: {batch_id}")
+                print(f"   Database Record ID: {batch_id}")
+                print(f"   Database Storage: 1 record with {prediction_result['predictions_count']} predictions")
             
             # Timing
             cycle_time = time.time() - cycle_start

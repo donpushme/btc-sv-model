@@ -311,16 +311,21 @@ python continuous_predictor.py
 ```
 
 **Database Structure:**
-Each prediction includes:
-- `sequence_number`: 1-288 for the 24-hour period
-- `timestamp`: Exact future time point
-- `minutes_ahead`: 5, 10, 15, ..., 1440 minutes
-- `predicted_volatility`: Volatility prediction for that time
-- `predicted_skewness`: Skewness prediction
-- `predicted_kurtosis`: Kurtosis prediction
-- `batch_id`: Unique identifier for the prediction batch
-- `is_us_trading_hours`: Boolean flag for US market hours
-- `is_weekend`: Boolean flag for weekend periods
+Each 5-minute cycle saves **ONE record** containing:
+- `batch_id`: Unique identifier for the prediction cycle
+- `prediction_timestamp`: When the prediction was made
+- `current_price`: Bitcoin price at prediction time
+- `predictions_count`: Always 288 (24 hours × 12 five-minute intervals)
+- `summary_stats`: Min/max/mean volatility statistics
+- `predictions`: Array of 288 individual predictions, each containing:
+  - `sequence_number`: 1-288 for the 24-hour period
+  - `timestamp`: Exact future time point
+  - `minutes_ahead`: 5, 10, 15, ..., 1440 minutes
+  - `predicted_volatility`: Volatility prediction for that time
+  - `predicted_skewness`: Skewness prediction
+  - `predicted_kurtosis`: Kurtosis prediction
+  - `is_us_trading_hours`: Boolean flag for US market hours
+  - `is_weekend`: Boolean flag for weekend periods
 
 **Stopping the Continuous Predictor:**
 - Press `Ctrl+C` for graceful shutdown
