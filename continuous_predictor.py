@@ -20,7 +20,8 @@ from dotenv import load_dotenv
 
 from predictor import RealTimeVolatilityPredictor
 from database_manager import DatabaseManager
-from trainer import VolatilityTrainer
+from trainer import BitcoinVolatilityTrainer
+from config import Config
 from utils import format_prediction_output, validate_bitcoin_data
 
 # Load environment variables
@@ -76,7 +77,8 @@ class ContinuousBitcoinPredictor:
         # Initialize trainer for continuous learning
         if self.enable_online_learning:
             try:
-                self.trainer = VolatilityTrainer()
+                config = Config()
+                self.trainer = BitcoinVolatilityTrainer(config)
                 print("✅ Training system initialized for continuous learning")
             except Exception as e:
                 print(f"⚠️ Training system initialization failed: {str(e)}")
