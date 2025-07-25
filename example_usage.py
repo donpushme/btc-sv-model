@@ -343,7 +343,7 @@ def main():
     csv_path = 'data/bitcoin_price_data.csv'
     
     if not os.path.exists(csv_path):
-        csv_path = download_sample_data(days=1000)
+        csv_path = download_sample_data(days=60)
         if csv_path is None:
             print("❌ Cannot proceed without data. Please provide Bitcoin price data.")
             return
