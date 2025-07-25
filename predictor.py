@@ -121,6 +121,11 @@ class RealTimeVolatilityPredictor:
         # Add engineered features
         df = self.feature_engineer.engineer_features(df)
         
+        # Handle volume feature naming mismatch
+        # During training, the model expects 'volume' but data_processor creates 'volume_proxy'
+        if 'volume_proxy' in df.columns and 'volume' not in df.columns:
+            df['volume'] = df['volume_proxy']
+        
         # Remove NaN values
         df = df.dropna().reset_index(drop=True)
         
