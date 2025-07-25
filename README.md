@@ -364,6 +364,20 @@ Automated risk level classification:
    # - Set torch.autograd.set_detect_anomaly(True) to debug gradient issues
    ```
 
+9. **PyTorch 2.6+ weights_only loading error**
+   ```bash
+   # If you get "Weights only load failed" or "Unsupported global: sklearn.preprocessing"
+   # This occurs because PyTorch 2.6+ changed default security for torch.load()
+   # The issue is fixed in predictor.py, but if you encounter it elsewhere:
+   
+   # Option 1: Explicitly allow all objects (for trusted files)
+   checkpoint = torch.load('model.pth', weights_only=False)
+   
+   # Option 2: Add safe globals for sklearn objects
+   torch.serialization.add_safe_globals([sklearn.preprocessing.RobustScaler])
+   checkpoint = torch.load('model.pth')
+   ```
+
 ### Performance Optimization
 
 - **GPU Training**: Ensure PyTorch detects your GPU

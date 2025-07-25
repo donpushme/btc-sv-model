@@ -46,7 +46,19 @@ class RealTimeVolatilityPredictor:
         Load trained model and preprocessing components.
         """
         try:
-            checkpoint = torch.load(model_path, map_location=self.device)
+            # Handle PyTorch 2.6+ weights_only security change
+            # We need to load sklearn scalers, so we explicitly set weights_only=False
+            # for our trusted checkpoint files
+            try:
+                checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
+            except Exception as e:
+                if "weights_only" in str(e).lower():
+                    # Fallback: Use safe globals approach for sklearn objects
+                    from sklearn.preprocessing import RobustScaler, StandardScaler
+                    torch.serialization.add_safe_globals([RobustScaler, StandardScaler])
+                    checkpoint = torch.load(model_path, map_location=self.device)
+                else:
+                    raise e
             
             # Load model configuration
             model_config = checkpoint['config']
