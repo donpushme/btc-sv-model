@@ -1,0 +1,362 @@
+# Bitcoin Volatility Prediction for Monte Carlo Simulation
+
+A comprehensive AI-powered system for predicting Bitcoin volatility, skewness, and kurtosis using deep learning techniques. This project is specifically designed for Monte Carlo simulations with real-time predictions that capture the cyclical nature of Bitcoin trading patterns.
+
+## 🚀 Features
+
+- **LSTM-based Neural Network** with attention mechanism for time series prediction
+- **Real-time Volatility Prediction** with 24-hour horizon and 5-minute intervals
+- **Monte Carlo Simulation** capabilities using predicted statistical moments
+- **Intraday Pattern Recognition** capturing US/Asian trading hours effects
+- **Advanced Feature Engineering** with 80+ technical indicators and market microstructure features
+- **Real-time Risk Assessment** with market regime classification
+- **Comprehensive Validation** and model monitoring tools
+
+## 📊 What It Predicts
+
+The model predicts three key statistical moments for Bitcoin price changes:
+
+1. **Volatility (σ)** - Price movement intensity
+2. **Skewness** - Asymmetry in returns distribution
+3. **Kurtosis** - Tail heaviness (fat-tail events)
+
+These predictions enable realistic Monte Carlo simulations that capture:
+- Higher volatility during US trading hours (9:30 AM - 4:00 PM EST)
+- Lower volatility during Asian night hours
+- Weekend effects and holiday patterns
+- Market stress periods and regime changes
+
+## 🛠️ Installation
+
+### Prerequisites
+
+- Python 3.8 or higher
+- CUDA-compatible GPU (optional, for faster training)
+
+### Setup
+
+1. **Clone the repository:**
+```bash
+git clone <repository-url>
+cd bitcoin-volatility-prediction
+```
+
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+3. **Create project directories:**
+```bash
+python utils.py
+```
+
+This will create the following directory structure:
+```
+├── data/           # Bitcoin price data
+├── models/         # Trained model checkpoints
+├── results/        # Training results and plots
+└── logs/          # Training logs
+```
+
+## 📁 Project Structure
+
+```
+bitcoin-volatility-prediction/
+├── config.py              # Configuration parameters
+├── data_processor.py      # Data loading and preprocessing
+├── feature_engineering.py # Advanced feature creation
+├── model.py               # Neural network architecture
+├── trainer.py             # Training pipeline
+├── predictor.py           # Real-time prediction interface
+├── utils.py               # Utility functions and Monte Carlo simulation
+├── requirements.txt       # Python dependencies
+├── README.md             # This file
+└── example_usage.py      # Complete usage example
+```
+
+## 📋 Data Requirements
+
+Your Bitcoin price data should be in CSV format with the following columns:
+
+| Column    | Description                    | Example                  |
+|-----------|--------------------------------|--------------------------|
+| timestamp | DateTime in any standard format | 2024-01-01 12:00:00    |
+| open      | Opening price                  | 45000.50                |
+| close     | Closing price                  | 45150.25                |
+| high      | Highest price                  | 45200.00                |
+| low       | Lowest price                   | 44980.75                |
+
+**Recommended data characteristics:**
+- **Frequency**: 5-minute intervals
+- **Duration**: Minimum 30 days for training
+- **Quality**: Clean data with minimal gaps
+
+You can obtain Bitcoin data from:
+- [CoinGecko API](https://www.coingecko.com/en/api)
+- [Binance API](https://binance-docs.github.io/apidocs/)
+- [Yahoo Finance](https://finance.yahoo.com/) (using `yfinance` library)
+
+## 🚀 Quick Start
+
+### 1. Prepare Your Data
+
+Place your Bitcoin price data as `data/bitcoin_price_data.csv`:
+
+```python
+import pandas as pd
+
+# Example: Download Bitcoin data using yfinance
+import yfinance as yf
+
+# Download 5-minute Bitcoin data
+btc = yf.download("BTC-USD", interval="5m", period="60d")
+btc.reset_index(inplace=True)
+btc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+btc = btc[['timestamp', 'open', 'close', 'high', 'low']]
+btc.to_csv('data/bitcoin_price_data.csv', index=False)
+```
+
+### 2. Train the Model
+
+```bash
+python trainer.py
+```
+
+This will:
+- Load and preprocess your data
+- Engineer 80+ features
+- Train the LSTM model with early stopping
+- Save the best model to `models/best_model.pth`
+- Generate training plots in `results/`
+
+### 3. Make Predictions
+
+```python
+from predictor import RealTimeVolatilityPredictor
+import pandas as pd
+
+# Load your latest Bitcoin data
+data = pd.read_csv('data/bitcoin_price_data.csv')
+
+# Initialize predictor
+predictor = RealTimeVolatilityPredictor()
+
+# Make prediction
+prediction = predictor.predict_next_period(data)
+
+print(f"Predicted Volatility: {prediction['predicted_volatility']:.4f}")
+print(f"Market Regime: {prediction['market_regime']}")
+print(f"Risk Level: {prediction['risk_assessment']}")
+```
+
+### 4. Run Monte Carlo Simulation
+
+```python
+from utils import monte_carlo_simulation, plot_monte_carlo_results
+
+# Use predicted values for simulation
+simulation_results, summary_stats = monte_carlo_simulation(
+    volatility=prediction['predicted_volatility'],
+    skewness=prediction['predicted_skewness'],
+    kurtosis=prediction['predicted_kurtosis'],
+    initial_price=prediction['current_price'],
+    intervals=288,  # 24 hours
+    num_simulations=1000
+)
+
+# Visualize results
+plot_monte_carlo_results(
+    simulation_results, 
+    summary_stats, 
+    prediction['current_price'],
+    save_path='results/monte_carlo_simulation.png'
+)
+
+print(f"Expected final price: ${summary_stats['mean_final_price']:,.2f}")
+print(f"Probability of profit: {summary_stats['probability_profit']:.2%}")
+```
+
+## ⚙️ Configuration
+
+Modify `config.py` to adjust model parameters:
+
+```python
+class Config:
+    # Model architecture
+    HIDDEN_SIZE = 128        # LSTM hidden units
+    NUM_LAYERS = 3          # LSTM layers
+    SEQUENCE_LENGTH = 144   # Input sequence length (12 hours)
+    
+    # Training
+    BATCH_SIZE = 32
+    LEARNING_RATE = 0.001
+    NUM_EPOCHS = 100
+    
+    # Prediction
+    PREDICTION_HORIZON = 288  # 24 hours output
+```
+
+## 🔄 Real-time Usage
+
+For real-time predictions, integrate the predictor into your trading system:
+
+```python
+import schedule
+import time
+from predictor import RealTimeVolatilityPredictor
+
+predictor = RealTimeVolatilityPredictor()
+
+def make_hourly_prediction():
+    # Fetch latest Bitcoin data
+    data = get_latest_bitcoin_data()  # Your data fetching function
+    
+    # Make prediction
+    prediction = predictor.predict_next_period(data)
+    
+    # Store or use prediction
+    save_prediction(prediction)  # Your storage function
+
+# Schedule predictions every hour
+schedule.every().hour.do(make_hourly_prediction)
+
+while True:
+    schedule.run_pending()
+    time.sleep(60)
+```
+
+## 📊 Model Performance
+
+The model tracks several metrics during training:
+
+- **Validation Loss**: Overall prediction accuracy
+- **R² Scores**: Individual performance for volatility, skewness, kurtosis
+- **Component Losses**: Weighted loss for each target variable
+
+Example training results:
+```
+Epoch 90/100
+  Train Loss: 0.023456
+  Val Loss: 0.028901
+  Val R² - Vol: 0.7543, Skew: 0.4892, Kurt: 0.3567
+```
+
+## 🎯 Advanced Features
+
+### Intraday Pattern Prediction
+
+Generate volatility patterns for specific time periods:
+
+```python
+# Predict next 4 hours with 5-minute resolution
+pattern = predictor.predict_intraday_pattern(data, intervals=48)
+print(pattern.head())
+```
+
+### Batch Predictions
+
+Process multiple datasets:
+
+```python
+datasets = [data1, data2, data3]
+predictions = predictor.batch_predict(datasets)
+```
+
+### Market Regime Classification
+
+The model automatically classifies market conditions:
+
+- `high_volatility_skewed`: High volatility with significant skewness
+- `high_volatility_normal`: High volatility, normal distribution
+- `low_volatility_stable`: Low volatility, stable conditions
+- `medium_volatility_fat_tails`: Medium volatility with fat tails
+
+## 🚨 Risk Assessment
+
+Automated risk level classification:
+
+- **Low**: Normal market conditions
+- **Medium**: Elevated volatility or moderate skewness
+- **High**: High volatility with extreme moments
+- **Very High**: Extreme market stress conditions
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **"No model found" error**
+   ```bash
+   # Ensure you've trained a model first
+   python trainer.py
+   ```
+
+2. **CUDA out of memory**
+   ```python
+   # Reduce batch size in config.py
+   BATCH_SIZE = 16  # or smaller
+   ```
+
+3. **Data validation errors**
+   ```python
+   from utils import validate_bitcoin_data
+   validation = validate_bitcoin_data(your_data)
+   print(validation['errors'])
+   ```
+
+4. **Feature mismatch during prediction**
+   - Ensure your prediction data has the same format as training data
+   - Check for missing timestamps or data gaps
+
+### Performance Optimization
+
+- **GPU Training**: Ensure PyTorch detects your GPU
+- **Data Size**: Use at least 30 days of 5-minute data for good results
+- **Memory**: 8GB+ RAM recommended for large datasets
+
+## 📈 Model Architecture
+
+The system uses a sophisticated LSTM architecture:
+
+```
+Input → Feature Engineering → LSTM Layers → Attention → Separate Heads → Output
+  ↓            ↓                  ↓            ↓           ↓              ↓
+OHLC Data → 80+ Features → Temporal Learning → Focus → Vol/Skew/Kurt → Predictions
+```
+
+**Key Components:**
+- **Feature Engineering**: Technical indicators, volatility measures, time features
+- **LSTM Backbone**: 3-layer bidirectional LSTM with dropout
+- **Attention Mechanism**: Focuses on relevant time periods
+- **Multi-head Output**: Separate prediction heads for each target
+- **Custom Loss**: Weighted combination optimizing all three targets
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🔗 References
+
+- [LSTM Networks for Time Series](https://arxiv.org/abs/1506.02025)
+- [Attention Mechanisms](https://arxiv.org/abs/1706.03762)
+- [Bitcoin Volatility Modeling](https://www.sciencedirect.com/science/article/pii/S0378426619302791)
+- [Monte Carlo Methods in Finance](https://link.springer.com/book/10.1007/978-3-662-05071-6)
+
+## 💬 Support
+
+For questions and support:
+- Create an issue on GitHub
+- Check the troubleshooting section above
+- Review the example usage script
+
+---
+
+**⚡ Ready to predict Bitcoin volatility like a pro? Start with the Quick Start guide above!** 
