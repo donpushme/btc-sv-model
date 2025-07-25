@@ -402,7 +402,7 @@ def main():
     trainer = BitcoinVolatilityTrainer(config)
     
     # Replace with your CSV file path
-    csv_path = 'data/bitcoin_price_data.csv'
+    csv_path = 'training_data/bitcoin_5min.csv'
     
     if not os.path.exists(csv_path):
         print(f"Please place your Bitcoin price data CSV file at: {csv_path}")

@@ -1,4 +1,9 @@
 import torch
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Config:
     # Data parameters
@@ -37,4 +42,24 @@ class Config:
     RESULTS_PATH = 'results/'
     
     # Real-time prediction
-    MIN_HISTORICAL_DATA_HOURS = 24  # Minimum hours of data needed for prediction 
+    MIN_HISTORICAL_DATA_HOURS = 24
+    
+    # Database settings (read from environment)
+    ENABLE_DATABASE = os.getenv('ENABLE_DATABASE', 'true').lower() == 'true'
+    DATABASE_NAME = os.getenv('DATABASE_NAME', 'bitcoin_volatility')
+    
+    # Online learning settings (read from environment)
+    ENABLE_ONLINE_LEARNING = os.getenv('ENABLE_ONLINE_LEARNING', 'true').lower() == 'true'
+    RETRAIN_INTERVAL_HOURS = int(os.getenv('RETRAIN_INTERVAL_HOURS', '24'))
+    MIN_NEW_DATA_POINTS = int(os.getenv('MIN_NEW_DATA_POINTS', '288'))
+    PERFORMANCE_THRESHOLD = float(os.getenv('PERFORMANCE_THRESHOLD', '0.05'))
+    MAX_TRAINING_DATA_HOURS = int(os.getenv('MAX_TRAINING_DATA_HOURS', '720'))
+    
+    # Data retention settings (read from environment)
+    PREDICTION_RETENTION_DAYS = int(os.getenv('PREDICTION_RETENTION_DAYS', '90'))
+    TRAINING_DATA_RETENTION_DAYS = int(os.getenv('TRAINING_DATA_RETENTION_DAYS', '180'))
+    PERFORMANCE_DATA_RETENTION_DAYS = int(os.getenv('PERFORMANCE_DATA_RETENTION_DAYS', '365'))
+    
+    # Model versioning (read from environment)
+    AUTO_MODEL_VERSIONING = os.getenv('AUTO_MODEL_VERSIONING', 'true').lower() == 'true'
+    KEEP_MODEL_VERSIONS = int(os.getenv('KEEP_MODEL_VERSIONS', '5')) 

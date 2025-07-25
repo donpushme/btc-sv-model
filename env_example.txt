@@ -1,0 +1,75 @@
+# =============================================================================
+# Bitcoin Volatility Prediction System - Environment Configuration
+# =============================================================================
+# INSTRUCTIONS: 
+# 1. Copy this file and rename it to '.env' (without .txt extension)
+# 2. Update the values according to your setup
+# 3. Keep .env file secure and never commit it to version control
+
+# =============================================================================
+# DATABASE CONFIGURATION
+# =============================================================================
+
+# MongoDB Connection String
+# Choose ONE of the options below and uncomment it:
+
+# Option 1: Local MongoDB (default - no credentials needed)
+MONGODB_URI=mongodb://localhost:27017/
+
+# Option 2: Local MongoDB with authentication
+# MONGODB_URI=mongodb://username:password@localhost:27017/bitcoin_volatility
+
+# Option 3: MongoDB Atlas (Cloud) - Replace with your actual credentials
+# MONGODB_URI=mongodb+srv://your_username:your_password@your_cluster.mongodb.net/bitcoin_volatility?retryWrites=true&w=majority
+
+# Option 4: Remote MongoDB server with authentication
+# MONGODB_URI=mongodb://your_username:your_password@remote_host:27017/bitcoin_volatility
+
+# Option 5: MongoDB replica set
+# MONGODB_URI=mongodb://username:password@host1:27017,host2:27017,host3:27017/bitcoin_volatility?replicaSet=myReplicaSet
+
+# Database name (if not specified in URI)
+DATABASE_NAME=bitcoin_volatility
+
+# =============================================================================
+# DATA RETENTION SETTINGS
+# =============================================================================
+
+# How long to keep different types of data (in days)
+PREDICTION_RETENTION_DAYS=90
+TRAINING_DATA_RETENTION_DAYS=180
+PERFORMANCE_DATA_RETENTION_DAYS=365
+
+# =============================================================================
+# ONLINE LEARNING CONFIGURATION
+# =============================================================================
+
+# Automatic model retraining settings
+RETRAIN_INTERVAL_HOURS=24
+MIN_NEW_DATA_POINTS=288
+PERFORMANCE_THRESHOLD=0.05
+
+# =============================================================================
+# EXAMPLES FOR DIFFERENT MONGODB SETUPS
+# =============================================================================
+
+# --- LOCAL DEVELOPMENT (No authentication) ---
+# MONGODB_URI=mongodb://localhost:27017/
+# DATABASE_NAME=bitcoin_volatility
+
+# --- LOCAL WITH AUTHENTICATION ---
+# MONGODB_URI=mongodb://admin:password123@localhost:27017/bitcoin_volatility
+
+# --- MONGODB ATLAS (Cloud) EXAMPLE ---
+# MONGODB_URI=mongodb+srv://myuser:mypassword@mycluster.abcde.mongodb.net/bitcoin_volatility?retryWrites=true&w=majority
+
+# --- DOCKER MONGODB EXAMPLE ---
+# MONGODB_URI=mongodb://root:example@localhost:27017/bitcoin_volatility?authSource=admin
+
+# =============================================================================
+# SECURITY NOTES
+# =============================================================================
+# - Never commit .env file to version control
+# - Use strong passwords for production
+# - Enable IP whitelisting in MongoDB Atlas
+# - Use environment-specific credentials 

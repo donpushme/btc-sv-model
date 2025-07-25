@@ -10,7 +10,10 @@ A comprehensive AI-powered system for predicting Bitcoin volatility, skewness, a
 - **Intraday Pattern Recognition** capturing US/Asian trading hours effects
 - **Advanced Feature Engineering** with 80+ technical indicators and market microstructure features
 - **Real-time Risk Assessment** with market regime classification
-- **Comprehensive Validation** and model monitoring tools
+- **MongoDB Integration** for persistent storage of predictions and training data
+- **Continuous Learning** with automatic model retraining on new data
+- **Production-Ready Architecture** with graceful shutdown and error handling
+- **Comprehensive Analytics** and performance monitoring dashboard
 
 ## 📊 What It Predicts
 
@@ -67,28 +70,62 @@ This will:
 - Check your Python and package versions
 - Verify PyTorch installation and GPU availability
 
+5. **Setup MongoDB (for database features):**
+
+**Option A: Local MongoDB**
+```bash
+# Windows (using Chocolatey)
+choco install mongodb
+
+# macOS (using Homebrew)
+brew install mongodb-community
+
+# Ubuntu/Debian
+sudo apt install mongodb
+
+# Start MongoDB service
+mongod
+```
+
+**Option B: MongoDB Atlas (Cloud)**
+- Create free account at [MongoDB Atlas](https://www.mongodb.com/atlas)
+- Create a cluster and get connection string
+- Update `.env` file with your connection string
+
+6. **Configure database connection:**
+```bash
+python database_manager.py
+```
+
+This will create a `.env` file where you can configure your MongoDB connection.
+
 This will create the following directory structure:
 ```
 ├── data/           # Bitcoin price data
 ├── models/         # Trained model checkpoints
 ├── results/        # Training results and plots
-└── logs/          # Training logs
+├── logs/           # Training logs
+└── .env           # Database configuration
 ```
 
 ## 📁 Project Structure
 
 ```
 bitcoin-volatility-prediction/
-├── config.py              # Configuration parameters
-├── data_processor.py      # Data loading and preprocessing
-├── feature_engineering.py # Advanced feature creation
-├── model.py               # Neural network architecture
-├── trainer.py             # Training pipeline
-├── predictor.py           # Real-time prediction interface
-├── utils.py               # Utility functions and Monte Carlo simulation
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
-└── example_usage.py      # Complete usage example
+├── config.py                  # Configuration parameters
+├── data_processor.py          # Data loading and preprocessing
+├── feature_engineering.py     # Advanced feature creation
+├── model.py                   # Neural network architecture
+├── trainer.py                 # Training pipeline
+├── predictor.py               # Basic real-time prediction interface
+├── realtime_predictor.py      # Enhanced predictor with DB & online learning
+├── database_manager.py        # MongoDB operations and data persistence
+├── realtime_example.py        # Production-ready real-time system
+├── utils.py                   # Utility functions and Monte Carlo simulation
+├── requirements.txt           # Python dependencies
+├── README.md                 # This file
+├── example_usage.py          # Complete basic usage example
+└── .env                      # Database configuration (created automatically)
 ```
 
 ## 📋 Data Requirements
@@ -193,6 +230,54 @@ print(f"Expected final price: ${summary_stats['mean_final_price']:,.2f}")
 print(f"Probability of profit: {summary_stats['probability_profit']:.2%}")
 ```
 
+### 5. MongoDB Integration & Continuous Learning
+
+```python
+from realtime_predictor import EnhancedRealTimePredictor
+
+# Initialize enhanced predictor with database and online learning
+predictor = EnhancedRealTimePredictor(
+    enable_database=True,
+    enable_online_learning=True
+)
+
+# Make prediction and save to database
+prediction = predictor.predict_and_save(data)
+
+# Get prediction history from database
+history = predictor.get_prediction_history(hours=24)
+print(f"Retrieved {len(history)} predictions from database")
+
+# Get analytics
+analytics = predictor.get_prediction_analytics(hours=24)
+print(f"Average volatility: {analytics['average_volatility']:.4f}")
+
+# Force model retraining with new data
+success = predictor.force_retrain()
+
+# Start background tasks (monitoring, cleanup, retraining)
+predictor.start_scheduled_tasks()
+```
+
+### 6. Production Deployment
+
+```python
+from realtime_example import ProductionBitcoinPredictor
+
+# Initialize production predictor
+production = ProductionBitcoinPredictor()
+
+# Start real-time monitoring (fetches live data every 30 minutes)
+production.start_realtime_monitoring(prediction_interval_minutes=30)
+
+# The system will:
+# - Fetch real-time Bitcoin data from Yahoo Finance
+# - Make predictions and save to database
+# - Automatically retrain model when needed
+# - Monitor performance and cleanup old data
+# - Handle graceful shutdown on Ctrl+C
+```
+
 ## ⚙️ Configuration
 
 Modify `config.py` to adjust model parameters:
@@ -260,6 +345,81 @@ Epoch 90/100
 
 ## 🎯 Advanced Features
 
+### MongoDB Database Integration
+
+Persistent storage for all predictions and model data:
+
+```python
+from database_manager import DatabaseManager
+
+# Initialize database
+db = DatabaseManager()
+
+# Save predictions automatically
+prediction = predictor.predict_and_save(data)
+
+# Query prediction history
+recent_predictions = db.get_recent_predictions(hours=24)
+
+# Get analytics
+analytics = predictor.get_prediction_analytics(hours=24)
+print(f"Average volatility: {analytics['average_volatility']:.4f}")
+
+# Database cleanup
+db.cleanup_old_data()
+```
+
+**Database Collections:**
+- `predictions`: All volatility predictions with timestamps
+- `training_data`: Historical price data for model retraining  
+- `models`: Model metadata and training metrics
+- `performance`: Model performance tracking over time
+
+### Continuous Learning & Auto-Retraining
+
+The system automatically improves with new data:
+
+```python
+# Enhanced predictor with online learning
+predictor = EnhancedRealTimePredictor(enable_online_learning=True)
+
+# System automatically:
+# - Collects new price data from predictions
+# - Triggers retraining when conditions are met
+# - Updates model with latest market patterns
+# - Maintains model version history
+
+# Manual retraining
+success = predictor.force_retrain()
+
+# Check retraining status
+status = predictor.get_system_status()
+print(f"Last retrain: {status['last_retrain']}")
+print(f"New data points: {status['new_data_count']}")
+```
+
+**Retraining Triggers:**
+- Time-based: Every 24 hours (configurable)
+- Data-based: After 288 new data points (24 hours worth)
+- Performance-based: When accuracy degrades significantly
+
+### Production-Ready Deployment
+
+Real-time system with fault tolerance:
+
+```python
+# Production system
+python realtime_example.py
+
+# Features:
+# - Automatic data fetching from Yahoo Finance
+# - Graceful error handling and recovery
+# - Background task scheduling
+# - Performance monitoring
+# - Database connection pooling
+# - Memory management and cleanup
+```
+
 ### Intraday Pattern Prediction
 
 Generate volatility patterns for specific time periods:
@@ -297,6 +457,39 @@ Automated risk level classification:
 - **High**: High volatility with extreme moments
 - **Very High**: Extreme market stress conditions
 
+## 🚀 Production Commands
+
+### Available Scripts
+
+```bash
+# Basic training and prediction
+python trainer.py                    # Train the model
+python predictor.py                  # Demo basic prediction
+python example_usage.py             # Complete example workflow
+
+# Enhanced real-time system
+python realtime_predictor.py        # Demo enhanced predictor
+python realtime_example.py          # Production system
+python realtime_example.py demo     # Analytics demo
+
+# Database management
+python database_manager.py          # Setup database and test connection
+python utils.py                     # System check and project setup
+```
+
+### Configuration Files
+
+```bash
+# Core configuration
+config.py                           # Model and training parameters
+
+# Database configuration  
+.env                                 # MongoDB connection and settings
+
+# Dependencies
+requirements.txt                     # Python packages
+```
+
 ## 🔧 Troubleshooting
 
 ### Common Issues
@@ -313,18 +506,44 @@ Automated risk level classification:
    BATCH_SIZE = 16  # or smaller
    ```
 
-3. **Data validation errors**
+3. **MongoDB connection failed**
+   ```bash
+   # Check MongoDB is running
+   mongod --version
+   
+   # Start MongoDB service
+   # Windows: net start MongoDB
+   # macOS: brew services start mongodb-community  
+   # Linux: sudo systemctl start mongod
+   
+   # Check connection string in .env file
+   MONGODB_URI=mongodb://localhost:27017/
+   ```
+
+4. **Database features disabled**
+   ```bash
+   # Install MongoDB driver
+   pip install pymongo
+   
+   # Test database connection
+   python database_manager.py
+   
+   # Enable in config.py
+   ENABLE_DATABASE = True
+   ```
+
+5. **Data validation errors**
    ```python
    from utils import validate_bitcoin_data
    validation = validate_bitcoin_data(your_data)
    print(validation['errors'])
    ```
 
-4. **Feature mismatch during prediction**
+6. **Feature mismatch during prediction**
    - Ensure your prediction data has the same format as training data
    - Check for missing timestamps or data gaps
 
-5. **Data download errors with yfinance**
+7. **Data download errors with yfinance**
    ```python
    # If you get "Length mismatch" errors when downloading data
    # The example_usage.py script now handles different yfinance formats automatically
@@ -339,13 +558,13 @@ Automated risk level classification:
    # Adjust column selection based on what's available
    ```
 
-6. **Python not found on Windows**
+8. **Python not found on Windows**
    - Install Python from Microsoft Store or python.org
    - Ensure "Add Python to PATH" is checked during installation
    - Use `python3` instead of `python` if needed
    - Restart command prompt after installation
 
-7. **PyTorch version compatibility issues**
+9. **PyTorch version compatibility issues**
    ```bash
    # If you get "ReduceLROnPlateau.__init__() got an unexpected keyword argument 'verbose'"
    # This has been fixed in the latest version, but if you encounter it:
@@ -354,17 +573,17 @@ Automated risk level classification:
    pip install --upgrade torch torchvision
    ```
 
-8. **PyTorch gradient computation errors**
-   ```bash
-   # If you get "one of the variables needed for gradient computation has been modified by an inplace operation"
-   # This error occurs when tensors are modified in-place during forward pass
-   # This has been fixed in the model architecture, but if you encounter similar issues:
-   # - Avoid using operations like tensor[index] = value
-   # - Use tensor = torch.cat([...]) instead of in-place modifications
-   # - Set torch.autograd.set_detect_anomaly(True) to debug gradient issues
-   ```
+10. **PyTorch gradient computation errors**
+    ```bash
+    # If you get "one of the variables needed for gradient computation has been modified by an inplace operation"
+    # This error occurs when tensors are modified in-place during forward pass
+    # This has been fixed in the model architecture, but if you encounter similar issues:
+    # - Avoid using operations like tensor[index] = value
+    # - Use tensor = torch.cat([...]) instead of in-place modifications
+    # - Set torch.autograd.set_detect_anomaly(True) to debug gradient issues
+    ```
 
-9. **PyTorch 2.6+ weights_only loading error**
+11. **PyTorch 2.6+ weights_only loading error**
    ```bash
    # ERROR: "Weights only load failed" or "Unsupported global: sklearn.preprocessing"
    # CAUSE: PyTorch 2.6+ changed default security for torch.load() to prevent code execution
@@ -392,29 +611,45 @@ Automated risk level classification:
    # - Switching between different PyTorch versions
    ```
 
-10. **Datetime accessor error during prediction**
-    ```bash
-    # ERROR: "Can only use .dt accessor with datetimelike values"
-    # CAUSE: Timestamp column not properly converted to datetime format
-    # REASON: Input data has timestamps as strings instead of datetime objects
-    
-    # ✅ SOLUTION: Already fixed in predictor.py and data_processor.py
-    # If you encounter this with custom data:
-    
-    # Ensure timestamps are properly formatted
-    import pandas as pd
-    data['timestamp'] = pd.to_datetime(data['timestamp'])
-    
-    # Common timestamp formats that work:
-    # - "2024-01-01 12:00:00"
-    # - "2024-01-01T12:00:00Z"  
-    # - Unix timestamps (will be auto-converted)
-    
-    # This error occurs when:
-    # - Input CSV has timestamps as strings
-    # - Datetime conversion fails due to invalid format
-    # - Missing or corrupt timestamp data
-    ```
+12. **Datetime accessor error during prediction**
+     ```bash
+     # ERROR: "Can only use .dt accessor with datetimelike values"
+     # CAUSE: Timestamp column not properly converted to datetime format
+     # REASON: Input data has timestamps as strings instead of datetime objects
+     
+     # ✅ SOLUTION: Already fixed in predictor.py and data_processor.py
+     # If you encounter this with custom data:
+     
+     # Ensure timestamps are properly formatted
+     import pandas as pd
+     data['timestamp'] = pd.to_datetime(data['timestamp'])
+     
+     # Common timestamp formats that work:
+     # - "2024-01-01 12:00:00"
+     # - "2024-01-01T12:00:00Z"  
+     # - Unix timestamps (will be auto-converted)
+     
+     # This error occurs when:
+     # - Input CSV has timestamps as strings
+     # - Datetime conversion fails due to invalid format
+     # - Missing or corrupt timestamp data
+     ```
+
+13. **Online learning not working**
+     ```bash
+     # Check configuration
+     ENABLE_ONLINE_LEARNING = True
+     
+     # Verify database is connected
+     python database_manager.py
+     
+     # Check retraining conditions
+     status = predictor.get_system_status()
+     print(f"New data points: {status['new_data_count']}")
+     
+     # Force retraining manually
+     success = predictor.force_retrain()
+     ```
 
 ### Performance Optimization
 
