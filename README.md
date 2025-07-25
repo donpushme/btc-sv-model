@@ -118,13 +118,13 @@ bitcoin-volatility-prediction/
 ├── model.py                   # Neural network architecture
 ├── trainer.py                 # Training pipeline
 ├── predictor.py               # Basic real-time prediction interface
-├── realtime_predictor.py      # Enhanced predictor with DB & online learning
+├── continuous_predictor.py    # Main continuous prediction system (Pyth Network API)
 ├── database_manager.py        # MongoDB operations and data persistence
-├── realtime_example.py        # Production-ready real-time system
 ├── utils.py                   # Utility functions and Monte Carlo simulation
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This file
 ├── example_usage.py          # Complete basic usage example
+├── test_pyth_api.py          # Pyth Network API testing
 └── .env                      # Database configuration (created automatically)
 ```
 
@@ -259,22 +259,89 @@ success = predictor.force_retrain()
 predictor.start_scheduled_tasks()
 ```
 
-### 6. Production Deployment
+### 6. Continuous Prediction (Every 5 Minutes with 288 Predictions)
+
+For continuous real-time monitoring that generates 288 volatility predictions every 5 minutes:
 
 ```python
-from realtime_example import ProductionBitcoinPredictor
+# Run the continuous predictor
+python continuous_predictor.py
+```
 
-# Initialize production predictor
-production = ProductionBitcoinPredictor()
+**What it does:**
+- **Runs every 5 minutes** automatically
+- **Generates 288 predictions** for the next 24 hours (5-minute intervals)
+- **Saves all predictions to MongoDB** with batch tracking
+- **Applies realistic volatility patterns** based on US trading hours
+- **Runs continuously** until stopped with Ctrl+C
 
-# Start real-time monitoring (fetches live data every 30 minutes)
-production.start_realtime_monitoring(prediction_interval_minutes=30)
+**Features:**
+- Real-time data fetching from Pyth Network API
+- Volatility multipliers based on time of day (higher during US market hours)
+- Weekend effects (lower volatility on weekends)
+- Graceful shutdown with Ctrl+C
+- Comprehensive logging and error handling
+- Database batch tracking for easy retrieval
+
+**Example Output:**
+```
+🚀 Starting Continuous Bitcoin Volatility Prediction
+⏰ Prediction interval: 5 minutes
+🔮 Predictions per cycle: 288 (next 24 hours)
+💾 Database storage: Enabled
+============================================================
+
+⏰ === Prediction Cycle #1 ===
+🕐 Time: 2024-01-15 14:30:00 UTC
+📡 Fetching real-time data for BTC-USD...
+✅ Fetched 1440 data points (latest: 2024-01-15 14:25:00)
+🔮 Generating 288 volatility predictions for next 24 hours...
+✅ Generated 288 predictions
+💾 Saving 288 predictions to database...
+✅ Saved 288/288 predictions with batch ID: continuous_1705329000
+
+📊 Cycle Summary:
+   Current Price: $42,350.75
+   Predictions Generated: 288
+   Volatility Range: 0.0125 - 0.0467
+   Mean Volatility: 0.0298
+   Database Batch ID: continuous_1705329000
+⏱️  Cycle processing time: 3.42 seconds
+😴 Sleeping for 5 minutes until next cycle...
+```
+
+**Database Structure:**
+Each prediction includes:
+- `sequence_number`: 1-288 for the 24-hour period
+- `timestamp`: Exact future time point
+- `minutes_ahead`: 5, 10, 15, ..., 1440 minutes
+- `predicted_volatility`: Volatility prediction for that time
+- `predicted_skewness`: Skewness prediction
+- `predicted_kurtosis`: Kurtosis prediction
+- `batch_id`: Unique identifier for the prediction batch
+- `is_us_trading_hours`: Boolean flag for US market hours
+- `is_weekend`: Boolean flag for weekend periods
+
+**Stopping the Continuous Predictor:**
+- Press `Ctrl+C` for graceful shutdown
+- The system will finish the current cycle and display final statistics
+
+### 7. Production Deployment
+
+```python
+from continuous_predictor import ContinuousBitcoinPredictor
+
+# Initialize continuous predictor
+predictor = ContinuousBitcoinPredictor(symbol="Crypto.BTC/USD")
+
+# Start continuous monitoring (runs every 5 minutes with 288 predictions each cycle)
+predictor.start_continuous_prediction(interval_minutes=5)
 
 # The system will:
-# - Fetch real-time Bitcoin data from Yahoo Finance
-# - Make predictions and save to database
-# - Automatically retrain model when needed
-# - Monitor performance and cleanup old data
+# - Fetch real-time Bitcoin data from Pyth Network API
+# - Generate 288 volatility predictions every 5 minutes
+# - Save all predictions to database with batch tracking
+# - Apply realistic volatility patterns based on trading hours
 # - Handle graceful shutdown on Ctrl+C
 ```
 
@@ -467,12 +534,11 @@ python trainer.py                    # Train the model
 python predictor.py                  # Demo basic prediction
 python example_usage.py             # Complete example workflow
 
-# Enhanced real-time system
-python realtime_predictor.py        # Demo enhanced predictor
-python realtime_example.py          # Production system
-python realtime_example.py demo     # Analytics demo
+# Continuous real-time system
+python continuous_predictor.py      # Main continuous prediction system (Pyth Network API)
 
-# Database management
+# Testing and utilities
+python test_pyth_api.py             # Test Pyth Network API connectivity
 python database_manager.py          # Setup database and test connection
 python utils.py                     # System check and project setup
 ```
