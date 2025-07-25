@@ -445,6 +445,56 @@ def create_project_directories():
         os.makedirs(directory, exist_ok=True)
         print(f"Created directory: {directory}")
 
+def check_system_requirements():
+    """
+    Check system requirements and package versions.
+    """
+    print("🔍 Checking system requirements...")
+    
+    import sys
+    print(f"Python version: {sys.version}")
+    
+    try:
+        import torch
+        print(f"PyTorch version: {torch.__version__}")
+        print(f"CUDA available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"CUDA version: {torch.version.cuda}")
+            print(f"GPU device: {torch.cuda.get_device_name(0)}")
+    except ImportError:
+        print("❌ PyTorch not installed")
+    
+    try:
+        import pandas as pd
+        print(f"Pandas version: {pd.__version__}")
+    except ImportError:
+        print("❌ Pandas not installed")
+    
+    try:
+        import numpy as np
+        print(f"NumPy version: {np.__version__}")
+    except ImportError:
+        print("❌ NumPy not installed")
+    
+    try:
+        import sklearn
+        print(f"Scikit-learn version: {sklearn.__version__}")
+    except ImportError:
+        print("❌ Scikit-learn not installed")
+    
+    try:
+        import yfinance as yf
+        print(f"yfinance available: ✅")
+    except ImportError:
+        print("❌ yfinance not installed")
+    
+    print("✅ System check completed!")
+
+
 if __name__ == "__main__":
     # Create project structure
-    create_project_directories() 
+    create_project_directories()
+    
+    # Run system check
+    print("\n" + "="*50)
+    check_system_requirements() 

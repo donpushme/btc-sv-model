@@ -55,12 +55,17 @@ pip install -r requirements.txt
 python -m pip install -r requirements.txt
 ```
 
-4. **Create project directories:**
+4. **Create project directories and check system:**
 ```bash
 python utils.py
 # or if python command doesn't work:
 python3 utils.py
 ```
+
+This will:
+- Create the necessary project directories
+- Check your Python and package versions
+- Verify PyTorch installation and GPU availability
 
 This will create the following directory structure:
 ```
@@ -339,6 +344,15 @@ Automated risk level classification:
    - Ensure "Add Python to PATH" is checked during installation
    - Use `python3` instead of `python` if needed
    - Restart command prompt after installation
+
+7. **PyTorch version compatibility issues**
+   ```bash
+   # If you get "ReduceLROnPlateau.__init__() got an unexpected keyword argument 'verbose'"
+   # This has been fixed in the latest version, but if you encounter it:
+   pip install torch>=2.0.0
+   # or update your PyTorch installation:
+   pip install --upgrade torch torchvision
+   ```
 
 ### Performance Optimization
 
