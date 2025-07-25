@@ -60,10 +60,45 @@ def download_sample_data(days: int = 60) -> str:
         
         # Reset index and prepare columns
         btc.reset_index(inplace=True)
-        btc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
         
-        # Select required columns
-        btc = btc[['timestamp', 'open', 'close', 'high', 'low']].copy()
+        # Handle different yfinance column structures
+        if len(btc.columns) == 7:
+            btc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+        elif len(btc.columns) == 6:
+            btc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        else:
+            # Use original column names and find the required ones
+            expected_cols = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
+            available_cols = [col for col in expected_cols if col in btc.columns]
+            
+            # Create mapping for standardized names
+            col_mapping = {
+                'Open': 'open',
+                'High': 'high', 
+                'Low': 'low',
+                'Close': 'close',
+                'Adj Close': 'adj_close',
+                'Volume': 'volume'
+            }
+            
+            # Rename columns
+            btc = btc.rename(columns=col_mapping)
+            
+            # Add timestamp column name if datetime index was reset
+            if 'Datetime' in btc.columns:
+                btc = btc.rename(columns={'Datetime': 'timestamp'})
+            elif btc.columns[0] not in ['timestamp', 'open', 'high', 'low', 'close']:
+                # First column is likely the timestamp
+                btc.columns = ['timestamp'] + list(btc.columns[1:])
+        
+        # Select required columns (ensure they exist)
+        required_cols = ['timestamp', 'open', 'close', 'high', 'low']
+        available_required = [col for col in required_cols if col in btc.columns]
+        
+        if len(available_required) < 5:
+            raise ValueError(f"Missing required columns. Available: {list(btc.columns)}, Required: {required_cols}")
+        
+        btc = btc[required_cols].copy()
         
         # Remove any NaN values
         btc.dropna(inplace=True)

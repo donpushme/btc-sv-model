@@ -35,20 +35,31 @@ These predictions enable realistic Monte Carlo simulations that capture:
 
 ### Setup
 
-1. **Clone the repository:**
+1. **Install Python (Windows users):**
+   If you get "Python was not found" error on Windows:
+   - Download Python from [python.org](https://www.python.org/downloads/)
+   - During installation, check "Add Python to PATH"
+   - Or install via Microsoft Store: `python3`
+   - Verify installation: `python --version` or `python3 --version`
+
+2. **Clone the repository:**
 ```bash
 git clone <repository-url>
 cd bitcoin-volatility-prediction
 ```
 
-2. **Install dependencies:**
+3. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
+# or on some systems:
+python -m pip install -r requirements.txt
 ```
 
-3. **Create project directories:**
+4. **Create project directories:**
 ```bash
 python utils.py
+# or if python command doesn't work:
+python3 utils.py
 ```
 
 This will create the following directory structure:
@@ -307,6 +318,27 @@ Automated risk level classification:
 4. **Feature mismatch during prediction**
    - Ensure your prediction data has the same format as training data
    - Check for missing timestamps or data gaps
+
+5. **Data download errors with yfinance**
+   ```python
+   # If you get "Length mismatch" errors when downloading data
+   # The example_usage.py script now handles different yfinance formats automatically
+   # But you can also manually download data:
+   
+   import yfinance as yf
+   import pandas as pd
+   
+   btc = yf.download("BTC-USD", interval="5m", period="30d")
+   btc.reset_index(inplace=True)
+   print("Available columns:", btc.columns.tolist())
+   # Adjust column selection based on what's available
+   ```
+
+6. **Python not found on Windows**
+   - Install Python from Microsoft Store or python.org
+   - Ensure "Add Python to PATH" is checked during installation
+   - Use `python3` instead of `python` if needed
+   - Restart command prompt after installation
 
 ### Performance Optimization
 
