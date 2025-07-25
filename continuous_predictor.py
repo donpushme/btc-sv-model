@@ -14,6 +14,8 @@ import sys
 import pandas as pd
 import numpy as np
 import requests
+import threading
+import queue
 from datetime import datetime, timedelta
 from typing import Dict, List
 from dotenv import load_dotenv
@@ -74,6 +76,13 @@ class ContinuousBitcoinPredictor:
         self.min_new_data_points = int(os.getenv('MIN_NEW_DATA_POINTS', '288'))
         self.last_retrain_time = None
         
+        # ✅ THREADING FOR BACKGROUND RETRAINING
+        self.retraining_thread = None
+        self.retraining_lock = threading.Lock()
+        self.is_retraining = False
+        self.retraining_queue = queue.Queue()
+        self.model_update_event = threading.Event()
+        
         # Initialize trainer for continuous learning
         if self.enable_online_learning:
             try:
@@ -94,6 +103,11 @@ class ContinuousBitcoinPredictor:
         print(f"💾 Database: {'Enabled' if self.enable_database else 'Disabled'}")
         print(f"🧠 Online learning: {'Enabled' if self.enable_online_learning else 'Disabled'}")
         print(f"🔧 Model Version: {self.current_model_version}")
+        
+        if self.enable_online_learning:
+            print("🔄 Independent background retraining: ✅ ENABLED")
+        else:
+            print("⏸️  Independent background retraining: ❌ DISABLED")
     
     def _get_model_version(self) -> str:
         """Get current model version."""
@@ -501,7 +515,76 @@ class ContinuousBitcoinPredictor:
     
     def perform_retraining(self) -> bool:
         """
-        Perform model retraining with accumulated data.
+        Trigger background retraining (non-blocking).
+        
+        Returns:
+            bool: True if retraining was triggered, False otherwise
+        """
+        if not self.enable_online_learning:
+            return False
+        
+        # Check if already retraining
+        with self.retraining_lock:
+            if self.is_retraining:
+                print("🧠 Retraining already in progress, skipping...")
+                return False
+        
+        # Trigger background retraining
+        self._trigger_background_retraining()
+        return True
+    
+    def _background_retraining_worker(self):
+        """
+        Background worker thread for model retraining.
+        Runs independently without blocking prediction cycles.
+        """
+        print("🧠 Background retraining worker started")
+        
+        while self.is_running:
+            try:
+                # Wait for retraining signal from queue
+                retrain_request = self.retraining_queue.get(timeout=60)  # 1 minute timeout
+                
+                if retrain_request == "STOP":
+                    break
+                
+                # Set retraining flag
+                with self.retraining_lock:
+                    self.is_retraining = True
+                
+                print("🧠 Background retraining worker: Starting retraining...")
+                
+                # Perform retraining
+                retrain_success = self._perform_retraining_internal()
+                
+                if retrain_success:
+                    print("✅ Background retraining worker: Retraining completed successfully")
+                    # Signal model update
+                    self.model_update_event.set()
+                else:
+                    print("⚠️ Background retraining worker: Retraining failed")
+                
+                # Clear retraining flag
+                with self.retraining_lock:
+                    self.is_retraining = False
+                
+                # Mark task as done
+                self.retraining_queue.task_done()
+                
+            except queue.Empty:
+                # No retraining request, continue waiting
+                continue
+            except Exception as e:
+                print(f"❌ Background retraining worker error: {str(e)}")
+                with self.retraining_lock:
+                    self.is_retraining = False
+                self.retraining_queue.task_done()
+        
+        print("🧠 Background retraining worker stopped")
+    
+    def _perform_retraining_internal(self) -> bool:
+        """
+        Internal retraining method used by background worker.
         
         Returns:
             bool: Success status
@@ -510,7 +593,6 @@ class ContinuousBitcoinPredictor:
             return False
             
         try:
-            print(f"🧠 Starting model retraining...")
             start_time = datetime.utcnow()
             
             # Get recent training data
@@ -522,7 +604,7 @@ class ContinuousBitcoinPredictor:
                 print(f"⚠️ Insufficient training data: {len(training_data)} < {self.min_new_data_points}")
                 return False
             
-            print(f"📊 Retraining with {len(training_data)} data points")
+            print(f"📊 Background retraining with {len(training_data)} data points")
             
             # Save training data to temporary CSV for trainer
             import tempfile
@@ -552,7 +634,7 @@ class ContinuousBitcoinPredictor:
                 # Reload the predictor with new model
                 try:
                     self.predictor = RealTimeVolatilityPredictor()
-                    print(f"✅ Model retrained successfully!")
+                    print(f"✅ Background retraining completed!")
                     print(f"   Old version: {old_version}")
                     print(f"   New version: {self.current_model_version}")
                     print(f"   Training time: {(datetime.utcnow() - start_time).total_seconds():.1f}s")
@@ -561,12 +643,73 @@ class ContinuousBitcoinPredictor:
                     print(f"⚠️ Failed to reload predictor: {str(e)}")
                     return False
             else:
-                print(f"❌ Model retraining failed")
+                print(f"❌ Background retraining failed")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error during retraining: {str(e)}")
+            print(f"❌ Error during background retraining: {str(e)}")
             return False
+    
+    def _start_background_retraining_thread(self):
+        """Start the background retraining thread."""
+        if not self.enable_online_learning:
+            return
+        
+        try:
+            self.retraining_thread = threading.Thread(
+                target=self._background_retraining_worker,
+                name="BackgroundRetraining",
+                daemon=True
+            )
+            self.retraining_thread.start()
+            print("✅ Background retraining thread started")
+        except Exception as e:
+            print(f"❌ Failed to start background retraining thread: {str(e)}")
+    
+    def _stop_background_retraining_thread(self):
+        """Stop the background retraining thread."""
+        if self.retraining_thread and self.retraining_thread.is_alive():
+            try:
+                # Send stop signal
+                self.retraining_queue.put("STOP")
+                # Wait for thread to finish (with timeout)
+                self.retraining_thread.join(timeout=30)
+                if self.retraining_thread.is_alive():
+                    print("⚠️ Background retraining thread did not stop gracefully")
+                else:
+                    print("✅ Background retraining thread stopped")
+            except Exception as e:
+                print(f"⚠️ Error stopping background retraining thread: {str(e)}")
+    
+    def _trigger_background_retraining(self):
+        """
+        Trigger background retraining without blocking.
+        """
+        if not self.enable_online_learning:
+            return
+        
+        # Check if already retraining
+        with self.retraining_lock:
+            if self.is_retraining:
+                print("🧠 Retraining already in progress, skipping...")
+                return
+        
+        # Send retraining request to background thread
+        try:
+            self.retraining_queue.put("RETRAIN", timeout=1)
+            print("🧠 Background retraining triggered")
+        except queue.Full:
+            print("⚠️ Retraining queue is full, skipping retraining request")
+    
+    def _check_model_update(self):
+        """
+        Check if model has been updated by background retraining.
+        """
+        if self.model_update_event.is_set():
+            self.model_update_event.clear()
+            print("🔄 Model updated by background retraining")
+            return True
+        return False
     
     def run_prediction_cycle(self) -> bool:
         """
@@ -582,6 +725,10 @@ class ContinuousBitcoinPredictor:
             print(f"\n⏰ === Prediction Cycle #{self.prediction_cycles} ===")
             print(f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
             
+            # Check if model has been updated by background retraining
+            if self._check_model_update():
+                print("🔄 Using updated model for this prediction cycle")
+            
             # Fetch real-time data
             price_data = self.fetch_realtime_data()
             
@@ -589,14 +736,14 @@ class ContinuousBitcoinPredictor:
             if self.enable_online_learning:
                 self.save_training_data(price_data)
             
-            # Check if model retraining is needed
+            # Check if model retraining is needed (non-blocking)
             if self.enable_online_learning and self.check_retraining_conditions():
-                print(f"🧠 Initiating model retraining...")
-                retrain_success = self.perform_retraining()
-                if retrain_success:
-                    print(f"✅ Model retraining completed successfully")
+                print(f"🧠 Triggering background retraining...")
+                retrain_triggered = self.perform_retraining()
+                if retrain_triggered:
+                    print(f"✅ Background retraining initiated (non-blocking)")
                 else:
-                    print(f"⚠️ Model retraining failed, continuing with current model")
+                    print(f"⚠️ Background retraining already in progress")
             
             # Generate 288 predictions
             prediction_result = self.generate_288_predictions(price_data)
@@ -609,7 +756,7 @@ class ContinuousBitcoinPredictor:
             # Update counters
             self.total_predictions_made += prediction_result['predictions_count']
             
-                         # Display summary
+            # Display summary
             stats = prediction_result['summary_stats']
             print(f"\n📊 Cycle Summary:")
             print(f"   Current Price: ${prediction_result['current_price']:,.2f}")
@@ -624,6 +771,12 @@ class ContinuousBitcoinPredictor:
                 else:
                     print(f"   Last Retrain: Never")
                 print(f"   Training Data: Saved for continuous learning")
+                # Show retraining status
+                with self.retraining_lock:
+                    if self.is_retraining:
+                        print(f"   Background Retraining: 🔄 IN PROGRESS")
+                    else:
+                        print(f"   Background Retraining: ✅ IDLE")
             if batch_id:
                 print(f"   Database Record ID: {batch_id}")
                 print(f"   Database Storage: 1 record with {prediction_result['predictions_count']} predictions")
@@ -654,12 +807,14 @@ class ContinuousBitcoinPredictor:
             print(f"   ├─ Retrain interval: {self.retrain_interval_hours} hours")
             print(f"   ├─ Min data points: {self.min_new_data_points}")
             print(f"   └─ Training data: Automatically saved from real-time feeds")
+            print(f"   └─ Background retraining: ✅ INDEPENDENT THREAD")
         print("=" * 60)
         
         self.is_running = True
         
-        # Background tasks integrated into continuous predictor
-        print(f"🔄 Background monitoring integrated into prediction cycles")
+        # Start background retraining thread
+        if self.enable_online_learning:
+            self._start_background_retraining_thread()
         
         print(f"🎯 Starting prediction cycles...")
         
@@ -692,6 +847,10 @@ class ContinuousBitcoinPredictor:
         
         print(f"\n🛑 Stopping continuous prediction...")
         self.is_running = False
+        
+        # Stop background retraining thread
+        if self.enable_online_learning:
+            self._stop_background_retraining_thread()
         
         # Close database connection if enabled
         if self.db_manager:
