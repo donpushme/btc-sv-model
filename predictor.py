@@ -101,8 +101,17 @@ class RealTimeVolatilityPredictor:
             raise ValueError(f"Need at least {self.config.SEQUENCE_LENGTH + max(self.config.RETURN_WINDOWS)} "
                            f"data points for prediction, got {len(price_data)}")
         
-        # Set the processor data
-        self.processor.data = price_data.copy()
+        # Set the processor data and ensure timestamp is datetime
+        df = price_data.copy()
+        if 'timestamp' in df.columns:
+            try:
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+            except Exception as e:
+                raise ValueError(f"Cannot convert timestamp column to datetime: {str(e)}")
+        else:
+            raise ValueError("Required column 'timestamp' not found in input data")
+        
+        self.processor.data = df
         
         # Calculate returns and basic features
         df = self.processor.calculate_returns()

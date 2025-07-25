@@ -91,6 +91,10 @@ class BitcoinDataProcessor:
     def add_time_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add time-based features to capture cyclical patterns."""
         
+        # Ensure timestamp is datetime
+        if 'timestamp' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
         # Extract time components
         df['hour'] = df['timestamp'].dt.hour
         df['day_of_week'] = df['timestamp'].dt.dayofweek

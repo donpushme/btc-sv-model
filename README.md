@@ -392,6 +392,30 @@ Automated risk level classification:
    # - Switching between different PyTorch versions
    ```
 
+10. **Datetime accessor error during prediction**
+    ```bash
+    # ERROR: "Can only use .dt accessor with datetimelike values"
+    # CAUSE: Timestamp column not properly converted to datetime format
+    # REASON: Input data has timestamps as strings instead of datetime objects
+    
+    # ✅ SOLUTION: Already fixed in predictor.py and data_processor.py
+    # If you encounter this with custom data:
+    
+    # Ensure timestamps are properly formatted
+    import pandas as pd
+    data['timestamp'] = pd.to_datetime(data['timestamp'])
+    
+    # Common timestamp formats that work:
+    # - "2024-01-01 12:00:00"
+    # - "2024-01-01T12:00:00Z"  
+    # - Unix timestamps (will be auto-converted)
+    
+    # This error occurs when:
+    # - Input CSV has timestamps as strings
+    # - Datetime conversion fails due to invalid format
+    # - Missing or corrupt timestamp data
+    ```
+
 ### Performance Optimization
 
 - **GPU Training**: Ensure PyTorch detects your GPU
