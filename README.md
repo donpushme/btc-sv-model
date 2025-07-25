@@ -354,6 +354,16 @@ Automated risk level classification:
    pip install --upgrade torch torchvision
    ```
 
+8. **PyTorch gradient computation errors**
+   ```bash
+   # If you get "one of the variables needed for gradient computation has been modified by an inplace operation"
+   # This error occurs when tensors are modified in-place during forward pass
+   # This has been fixed in the model architecture, but if you encounter similar issues:
+   # - Avoid using operations like tensor[index] = value
+   # - Use tensor = torch.cat([...]) instead of in-place modifications
+   # - Set torch.autograd.set_detect_anomaly(True) to debug gradient issues
+   ```
+
 ### Performance Optimization
 
 - **GPU Training**: Ensure PyTorch detects your GPU

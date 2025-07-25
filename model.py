@@ -101,12 +101,12 @@ class VolatilityLSTM(nn.Module):
         skewness = self.skewness_head(attended_output)
         kurtosis = self.kurtosis_head(attended_output)
         
+        # Apply activation functions before concatenating
+        volatility = F.softplus(volatility)  # Volatility (always positive)
+        # Skewness and kurtosis can be any real number (no activation needed)
+        
         # Concatenate outputs
         output = torch.cat([volatility, skewness, kurtosis], dim=1)
-        
-        # Apply activation functions
-        output[:, 0] = F.softplus(output[:, 0])  # Volatility (always positive)
-        # Skewness and kurtosis can be any real number
         
         return output
 
@@ -174,8 +174,10 @@ class EnsembleModel(nn.Module):
         # Final combination
         output = self.combination_layer(combined)
         
-        # Apply activation functions
-        output[:, 0] = F.softplus(output[:, 0])  # Volatility (always positive)
+        # Apply activation functions (avoid in-place operations)
+        volatility = F.softplus(output[:, 0:1])  # Volatility (always positive)
+        other_outputs = output[:, 1:]  # Skewness and kurtosis
+        output = torch.cat([volatility, other_outputs], dim=1)
         
         return output
 

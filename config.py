@@ -14,7 +14,7 @@ class Config:
     DROPOUT = 0.2
     
     # Training parameters
-    BATCH_SIZE = 32
+    BATCH_SIZE = 16  # Reduced for better memory efficiency
     LEARNING_RATE = 0.001
     NUM_EPOCHS = 100
     VALIDATION_SPLIT = 0.2
