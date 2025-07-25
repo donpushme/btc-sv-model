@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from predictor import RealTimeVolatilityPredictor
 from database_manager import DatabaseManager
+from trainer import VolatilityTrainer
 from utils import format_prediction_output, validate_bitcoin_data
 
 # Load environment variables
@@ -66,6 +67,20 @@ class ContinuousBitcoinPredictor:
         self.prediction_cycles = 0
         self.total_predictions_made = 0
         self.current_model_version = self._get_model_version()
+        
+        # Training configuration
+        self.retrain_interval_hours = int(os.getenv('RETRAIN_INTERVAL_HOURS', '24'))
+        self.min_new_data_points = int(os.getenv('MIN_NEW_DATA_POINTS', '288'))
+        self.last_retrain_time = None
+        
+        # Initialize trainer for continuous learning
+        if self.enable_online_learning:
+            try:
+                self.trainer = VolatilityTrainer()
+                print("✅ Training system initialized for continuous learning")
+            except Exception as e:
+                print(f"⚠️ Training system initialization failed: {str(e)}")
+                self.enable_online_learning = False
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -416,6 +431,141 @@ class ContinuousBitcoinPredictor:
             print(f"❌ Prediction failed: {str(e)}")
             raise
     
+    def save_training_data(self, price_data: pd.DataFrame) -> bool:
+        """
+        Save real-time price data to database for future training.
+        
+        Args:
+            price_data: Real-time Bitcoin price data
+            
+        Returns:
+            bool: Success status
+        """
+        if not self.enable_database or not self.db_manager:
+            return False
+            
+        try:
+            # Save the latest data points for training
+            recent_data = price_data.tail(50)  # Save last 50 data points
+            self.db_manager.save_training_data(
+                recent_data, 
+                data_source="realtime_continuous"
+            )
+            return True
+        except Exception as e:
+            print(f"⚠️ Failed to save training data: {str(e)}")
+            return False
+    
+    def check_retraining_conditions(self) -> bool:
+        """
+        Check if model should be retrained based on time and data conditions.
+        
+        Returns:
+            bool: True if retraining is needed
+        """
+        if not self.enable_online_learning:
+            return False
+            
+        current_time = datetime.utcnow()
+        
+        # Check time-based condition
+        if self.last_retrain_time is None:
+            time_based = True
+        else:
+            hours_since_retrain = (current_time - self.last_retrain_time).total_seconds() / 3600
+            time_based = hours_since_retrain >= self.retrain_interval_hours
+        
+        # Check data-based condition
+        data_based = False
+        if self.enable_database and self.db_manager:
+            try:
+                # Get training data added since last retrain
+                cutoff_time = self.last_retrain_time or (current_time - timedelta(hours=self.retrain_interval_hours))
+                recent_data = self.db_manager.get_training_data_for_update(
+                    hours=int((current_time - cutoff_time).total_seconds() / 3600)
+                )
+                data_based = len(recent_data) >= self.min_new_data_points
+            except Exception as e:
+                print(f"⚠️ Error checking training data: {str(e)}")
+        
+        should_retrain = time_based or data_based
+        
+        if should_retrain:
+            print(f"🧠 Retraining conditions met:")
+            print(f"   Time-based: {time_based} (interval: {self.retrain_interval_hours}h)")
+            print(f"   Data-based: {data_based} (min points: {self.min_new_data_points})")
+        
+        return should_retrain
+    
+    def perform_retraining(self) -> bool:
+        """
+        Perform model retraining with accumulated data.
+        
+        Returns:
+            bool: Success status
+        """
+        if not self.enable_online_learning or not hasattr(self, 'trainer'):
+            return False
+            
+        try:
+            print(f"🧠 Starting model retraining...")
+            start_time = datetime.utcnow()
+            
+            # Get recent training data
+            training_data = self.db_manager.get_training_data_for_update(
+                hours=self.retrain_interval_hours * 2  # Get extra data for better training
+            )
+            
+            if len(training_data) < self.min_new_data_points:
+                print(f"⚠️ Insufficient training data: {len(training_data)} < {self.min_new_data_points}")
+                return False
+            
+            print(f"📊 Retraining with {len(training_data)} data points")
+            
+            # Save training data to temporary CSV for trainer
+            import tempfile
+            import os as temp_os
+            temp_csv = None
+            try:
+                # Create temporary CSV file
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+                    temp_csv = f.name
+                    training_data.to_csv(temp_csv, index=False)
+                
+                # Perform training
+                training_results = self.trainer.train(temp_csv)
+                success = training_results is not None
+                
+            finally:
+                # Clean up temporary file
+                if temp_csv and temp_os.path.exists(temp_csv):
+                    temp_os.unlink(temp_csv)
+            
+            if success:
+                # Update model version and reload predictor
+                old_version = self.current_model_version
+                self.current_model_version = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                self.last_retrain_time = datetime.utcnow()
+                
+                # Reload the predictor with new model
+                try:
+                    self.predictor = RealTimeVolatilityPredictor()
+                    print(f"✅ Model retrained successfully!")
+                    print(f"   Old version: {old_version}")
+                    print(f"   New version: {self.current_model_version}")
+                    print(f"   Training time: {(datetime.utcnow() - start_time).total_seconds():.1f}s")
+                    return True
+                except Exception as e:
+                    print(f"⚠️ Failed to reload predictor: {str(e)}")
+                    return False
+            else:
+                print(f"❌ Model retraining failed")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error during retraining: {str(e)}")
+            return False
+    
     def run_prediction_cycle(self) -> bool:
         """
         Run one complete prediction cycle.
@@ -432,6 +582,19 @@ class ContinuousBitcoinPredictor:
             
             # Fetch real-time data
             price_data = self.fetch_realtime_data()
+            
+            # Save real-time data for training (continuous learning)
+            if self.enable_online_learning:
+                self.save_training_data(price_data)
+            
+            # Check if model retraining is needed
+            if self.enable_online_learning and self.check_retraining_conditions():
+                print(f"🧠 Initiating model retraining...")
+                retrain_success = self.perform_retraining()
+                if retrain_success:
+                    print(f"✅ Model retraining completed successfully")
+                else:
+                    print(f"⚠️ Model retraining failed, continuing with current model")
             
             # Generate 288 predictions
             prediction_result = self.generate_288_predictions(price_data)
@@ -451,6 +614,14 @@ class ContinuousBitcoinPredictor:
             print(f"   Predictions Generated: {prediction_result['predictions_count']}")
             print(f"   Volatility Range: {stats['min_volatility']:.4f} - {stats['max_volatility']:.4f}")
             print(f"   Mean Volatility: {stats['mean_volatility']:.4f}")
+            print(f"   Model Version: {self.current_model_version}")
+            if self.enable_online_learning:
+                if self.last_retrain_time:
+                    hours_since = (datetime.utcnow() - self.last_retrain_time).total_seconds() / 3600
+                    print(f"   Last Retrain: {hours_since:.1f}h ago")
+                else:
+                    print(f"   Last Retrain: Never")
+                print(f"   Training Data: Saved for continuous learning")
             if batch_id:
                 print(f"   Database Record ID: {batch_id}")
                 print(f"   Database Storage: 1 record with {prediction_result['predictions_count']} predictions")
@@ -476,6 +647,11 @@ class ContinuousBitcoinPredictor:
         print(f"⏰ Prediction interval: {interval_minutes} minutes")
         print(f"🔮 Predictions per cycle: 288 (next 24 hours)")
         print(f"💾 Database storage: {'Enabled' if self.enable_database else 'Disabled'}")
+        print(f"🧠 Online learning: {'Enabled' if self.enable_online_learning else 'Disabled'}")
+        if self.enable_online_learning:
+            print(f"   ├─ Retrain interval: {self.retrain_interval_hours} hours")
+            print(f"   ├─ Min data points: {self.min_new_data_points}")
+            print(f"   └─ Training data: Automatically saved from real-time feeds")
         print("=" * 60)
         
         self.is_running = True
@@ -527,6 +703,12 @@ class ContinuousBitcoinPredictor:
         print(f"\n📊 === Final Statistics ===")
         print(f"   Total cycles completed: {self.prediction_cycles}")
         print(f"   Total predictions made: {self.total_predictions_made:,}")
+        if self.enable_online_learning:
+            if self.last_retrain_time:
+                print(f"   Last model retrain: {self.last_retrain_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                print(f"   Final model version: {self.current_model_version}")
+            else:
+                print(f"   Model retraining: Not performed during session")
         print(f"   Session end time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         print(f"✅ Continuous prediction stopped")
 
