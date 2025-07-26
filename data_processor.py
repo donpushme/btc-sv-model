@@ -136,9 +136,23 @@ class BitcoinDataProcessor:
             future_returns = df['return'].iloc[i+1:i+1+prediction_horizon]
             
             if len(future_returns) == prediction_horizon and not future_returns.isna().any():
-                df.loc[i, 'target_volatility'] = future_returns.std()
-                df.loc[i, 'target_skewness'] = future_returns.skew()
-                df.loc[i, 'target_kurtosis'] = future_returns.kurt()
+                volatility = future_returns.std()
+                skewness = future_returns.skew()
+                kurtosis = future_returns.kurt()  # This is excess kurtosis
+                
+                # Convert excess kurtosis to absolute kurtosis and apply bounds
+                absolute_kurtosis = kurtosis + 3  # Convert to absolute kurtosis
+                
+                # Apply reasonable bounds for kurtosis (3 to 30)
+                # Normal distribution has kurtosis = 3, extreme values capped at 30
+                absolute_kurtosis = max(min(absolute_kurtosis, 30.0), 3.0)
+                
+                # Convert back to excess kurtosis for consistency
+                excess_kurtosis = absolute_kurtosis - 3
+                
+                df.loc[i, 'target_volatility'] = volatility
+                df.loc[i, 'target_skewness'] = skewness
+                df.loc[i, 'target_kurtosis'] = excess_kurtosis
         
         return df
     

@@ -168,11 +168,21 @@ class FeatureEngineer:
         
         # Separate scalers for features and targets
         self.scalers['features'] = RobustScaler()
-        self.scalers['targets'] = StandardScaler()
+        # Use RobustScaler for targets to handle outliers better, especially for kurtosis
+        self.scalers['targets'] = RobustScaler()
+        
+        # Preprocess targets before scaling
+        df_processed = df.copy()
+        
+        # Apply log transformation to kurtosis to handle extreme values
+        # Add small constant to avoid log(0) and handle negative excess kurtosis
+        if 'target_kurtosis' in target_cols:
+            # Convert excess kurtosis to absolute kurtosis, then apply log
+            df_processed['target_kurtosis'] = np.log(df_processed['target_kurtosis'] + 4)  # +4 ensures positive values
         
         # Fit scalers
         self.scalers['features'].fit(df[feature_cols])
-        self.scalers['targets'].fit(df[target_cols])
+        self.scalers['targets'].fit(df_processed[target_cols])
         
         self.feature_names = feature_cols
         
@@ -184,15 +194,26 @@ class FeatureEngineer:
         
         df_scaled = df.copy()
         
+        # Apply log transformation to kurtosis before scaling
+        if 'target_kurtosis' in target_cols:
+            df_scaled['target_kurtosis'] = np.log(df_scaled['target_kurtosis'] + 4)
+        
         # Scale features and targets
         df_scaled[feature_cols] = self.scalers['features'].transform(df[feature_cols])
-        df_scaled[target_cols] = self.scalers['targets'].transform(df[target_cols])
+        df_scaled[target_cols] = self.scalers['targets'].transform(df_scaled[target_cols])
         
         return df_scaled
     
     def inverse_transform_targets(self, targets: np.ndarray) -> np.ndarray:
         """Inverse transform predictions back to original scale."""
-        return self.scalers['targets'].inverse_transform(targets)
+        # First inverse transform the scaled values
+        targets_original = self.scalers['targets'].inverse_transform(targets)
+        
+        # Reverse the log transformation for kurtosis (column 2)
+        if targets_original.shape[1] > 2:  # Ensure we have kurtosis column
+            targets_original[:, 2] = np.exp(targets_original[:, 2]) - 4
+        
+        return targets_original
 
 
 class BitcoinDataset(Dataset):

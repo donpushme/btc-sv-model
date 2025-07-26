@@ -332,6 +332,21 @@ class ContinuousBitcoinPredictor:
                     'prediction_type': 'continuous_5min'
                 }
                 
+                # Extract predictions
+                volatility = float(prediction['predicted_volatility'])
+                skewness = float(prediction['predicted_skewness'])
+                kurtosis = float(prediction['predicted_kurtosis'])
+                
+                # Apply validation bounds to prevent extreme predictions
+                volatility = max(min(volatility, 0.1), 0.001)  # 0.1% to 10%
+                skewness = max(min(skewness, 2.0), -2.0)       # -2 to +2
+                kurtosis = max(min(kurtosis, 27.0), -1.0)      # -1 to +27 (excess kurtosis)
+                
+                # Update prediction with validated values
+                prediction['predicted_volatility'] = volatility
+                prediction['predicted_skewness'] = skewness
+                prediction['predicted_kurtosis'] = kurtosis
+                
                 predictions.append(prediction)
             
             # Calculate summary statistics

@@ -177,6 +177,16 @@ class RealTimeVolatilityPredictor:
         skewness = float(prediction_original[0, 1])
         kurtosis = float(prediction_original[0, 2])
         
+        # Apply validation bounds to prevent extreme predictions
+        # Volatility should be positive and reasonable (0.001 to 0.1 = 0.1% to 10%)
+        volatility = max(min(volatility, 0.1), 0.001)
+        
+        # Skewness can be negative or positive but should be reasonable (-2 to +2)
+        skewness = max(min(skewness, 2.0), -2.0)
+        
+        # Kurtosis (excess kurtosis) should be reasonable (-1 to +27, corresponding to absolute kurtosis 2-30)
+        kurtosis = max(min(kurtosis, 27.0), -1.0)
+        
         # Current price for context
         if current_price is None:
             current_price = float(price_data['close'].iloc[-1])

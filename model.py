@@ -189,7 +189,7 @@ class VolatilityLoss(nn.Module):
     """
     
     def __init__(self, volatility_weight: float = 2.0, skewness_weight: float = 1.0, 
-                 kurtosis_weight: float = 1.0):
+                 kurtosis_weight: float = 1.5):  # Increased kurtosis weight
         super(VolatilityLoss, self).__init__()
         self.volatility_weight = volatility_weight
         self.skewness_weight = skewness_weight
@@ -206,7 +206,10 @@ class VolatilityLoss(nn.Module):
         # Calculate individual losses
         vol_loss = F.mse_loss(pred_vol, target_vol)
         skew_loss = F.mse_loss(pred_skew, target_skew)
-        kurt_loss = F.mse_loss(pred_kurt, target_kurt)
+        
+        # For kurtosis, use Huber loss which is more robust to outliers
+        # This is especially important since kurtosis values can be extreme
+        kurt_loss = F.huber_loss(pred_kurt, target_kurt, delta=1.0)
         
         # Weighted combination
         total_loss = (self.volatility_weight * vol_loss + 

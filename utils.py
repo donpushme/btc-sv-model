@@ -924,6 +924,146 @@ def check_system_requirements():
     print("✅ System check completed!")
 
 
+def analyze_training_data_quality(csv_path: str) -> Dict:
+    """
+    Analyze training data quality to identify potential issues with kurtosis and other targets.
+    
+    Args:
+        csv_path: Path to the training data CSV file
+        
+    Returns:
+        Dictionary with analysis results
+    """
+    print("🔍 Analyzing training data quality...")
+    
+    # Load data
+    df = pd.read_csv(csv_path)
+    
+    # Check if target columns exist
+    target_cols = ['target_volatility', 'target_skewness', 'target_kurtosis']
+    missing_cols = [col for col in target_cols if col not in df.columns]
+    
+    if missing_cols:
+        print(f"❌ Missing target columns: {missing_cols}")
+        return {'error': f"Missing columns: {missing_cols}"}
+    
+    analysis = {}
+    
+    # Analyze each target
+    for col in target_cols:
+        values = df[col].dropna()
+        
+        analysis[col] = {
+            'count': len(values),
+            'mean': float(values.mean()),
+            'std': float(values.std()),
+            'min': float(values.min()),
+            'max': float(values.max()),
+            'q25': float(values.quantile(0.25)),
+            'q50': float(values.quantile(0.50)),
+            'q75': float(values.quantile(0.75)),
+            'outliers_3std': len(values[abs(values - values.mean()) > 3 * values.std()]),
+            'outliers_5std': len(values[abs(values - values.mean()) > 5 * values.std()])
+        }
+    
+    # Print summary
+    print("\n📊 Training Data Analysis Summary:")
+    print("=" * 50)
+    
+    for col, stats in analysis.items():
+        print(f"\n{col}:")
+        print(f"  Count: {stats['count']:,}")
+        print(f"  Range: {stats['min']:.4f} to {stats['max']:.4f}")
+        print(f"  Mean: {stats['mean']:.4f} ± {stats['std']:.4f}")
+        print(f"  Q25/Q50/Q75: {stats['q25']:.4f} / {stats['q50']:.4f} / {stats['q75']:.4f}")
+        print(f"  Outliers (>3σ): {stats['outliers_3std']} ({stats['outliers_3std']/stats['count']*100:.1f}%)")
+        print(f"  Outliers (>5σ): {stats['outliers_5std']} ({stats['outliers_5std']/stats['count']*100:.1f}%)")
+    
+    # Specific kurtosis analysis
+    kurtosis_values = df['target_kurtosis'].dropna()
+    print(f"\n🎯 Kurtosis Analysis:")
+    print(f"  Excess kurtosis range: {kurtosis_values.min():.2f} to {kurtosis_values.max():.2f}")
+    print(f"  Absolute kurtosis range: {kurtosis_values.min() + 3:.2f} to {kurtosis_values.max() + 3:.2f}")
+    
+    # Check for extreme values
+    extreme_kurtosis = kurtosis_values[kurtosis_values > 20]
+    if len(extreme_kurtosis) > 0:
+        print(f"  ⚠️  Found {len(extreme_kurtosis)} extreme kurtosis values (>20)")
+        print(f"     These will be capped during training")
+    
+    # Recommendations
+    print(f"\n💡 Recommendations:")
+    if analysis['target_kurtosis']['outliers_3std'] > analysis['target_kurtosis']['count'] * 0.01:
+        print("  - High number of kurtosis outliers detected")
+        print("  - The new bounds (3-30 absolute kurtosis) should help")
+    
+    if analysis['target_kurtosis']['std'] > 10:
+        print("  - High kurtosis variance detected")
+        print("  - Log transformation should stabilize training")
+    
+    return analysis
+
+
+def validate_prediction_bounds(predictions: List[Dict]) -> Dict:
+    """
+    Validate that predictions are within reasonable bounds.
+    
+    Args:
+        predictions: List of prediction dictionaries
+        
+    Returns:
+        Dictionary with validation results
+    """
+    if not predictions:
+        return {'error': 'No predictions provided'}
+    
+    validation = {
+        'total_predictions': len(predictions),
+        'volatility_valid': 0,
+        'skewness_valid': 0,
+        'kurtosis_valid': 0,
+        'all_valid': 0,
+        'issues': []
+    }
+    
+    for i, pred in enumerate(predictions):
+        vol = pred.get('predicted_volatility', 0)
+        skew = pred.get('predicted_skewness', 0)
+        kurt = pred.get('predicted_kurtosis', 0)
+        
+        # Check bounds
+        vol_valid = 0.001 <= vol <= 0.1
+        skew_valid = -2.0 <= skew <= 2.0
+        kurt_valid = -1.0 <= kurt <= 27.0
+        
+        if vol_valid:
+            validation['volatility_valid'] += 1
+        if skew_valid:
+            validation['skewness_valid'] += 1
+        if kurt_valid:
+            validation['kurtosis_valid'] += 1
+        if vol_valid and skew_valid and kurt_valid:
+            validation['all_valid'] += 1
+        else:
+            validation['issues'].append({
+                'index': i,
+                'volatility': vol,
+                'skewness': skew,
+                'kurtosis': kurt,
+                'vol_valid': vol_valid,
+                'skew_valid': skew_valid,
+                'kurt_valid': kurt_valid
+            })
+    
+    # Calculate percentages
+    validation['volatility_valid_pct'] = validation['volatility_valid'] / validation['total_predictions'] * 100
+    validation['skewness_valid_pct'] = validation['skewness_valid'] / validation['total_predictions'] * 100
+    validation['kurtosis_valid_pct'] = validation['kurtosis_valid'] / validation['total_predictions'] * 100
+    validation['all_valid_pct'] = validation['all_valid'] / validation['total_predictions'] * 100
+    
+    return validation
+
+
 if __name__ == "__main__":
     # Create project structure
     create_project_directories()
