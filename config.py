@@ -46,7 +46,7 @@ class Config:
     
     # Database settings (read from environment)
     ENABLE_DATABASE = os.getenv('ENABLE_DATABASE', 'true').lower() == 'true'
-    DATABASE_NAME = os.getenv('DATABASE_NAME', 'bitcoin_volatility')
+    DATABASE_NAME = os.getenv('DATABASE_NAME', 'synth_prediction')
     
     # Online learning settings (read from environment)
     ENABLE_ONLINE_LEARNING = os.getenv('ENABLE_ONLINE_LEARNING', 'true').lower() == 'true'

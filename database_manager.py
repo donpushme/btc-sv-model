@@ -21,7 +21,7 @@ class DatabaseManager:
     Manages MongoDB operations for the Bitcoin volatility prediction system.
     """
     
-    def __init__(self, connection_string: str = None, database_name: str = "bitcoin_volatility"):
+    def __init__(self, connection_string: str = None, database_name: str = "synth_prediction"):
         """
         Initialize database connection.
         
@@ -52,7 +52,7 @@ class DatabaseManager:
     def _init_collections(self):
         """Initialize collections and create indexes."""
         # Collection names
-        self.predictions_collection = self.db.predictions
+        self.predictions_collection = self.db.btc
         self.training_data_collection = self.db.training_data
         self.models_collection = self.db.models
         self.performance_collection = self.db.performance
@@ -459,11 +459,11 @@ class DatabaseManager:
 def create_database_config():
     """Create a .env file with database configuration."""
     config_content = """# MongoDB Configuration
-MONGODB_URI=mongodb://localhost:27017/
-DATABASE_NAME=bitcoin_volatility
+MONGODB_URI=mongodb://localhost:27017/synth_prediction
+DATABASE_NAME=synth_prediction
 
 # Optional: MongoDB Atlas connection (comment out local URI above)
-# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
+# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/synth_prediction
 
 # Collection Settings
 PREDICTION_RETENTION_DAYS=90

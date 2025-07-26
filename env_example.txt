@@ -14,22 +14,22 @@
 # Choose ONE of the options below and uncomment it:
 
 # Option 1: Local MongoDB (default - no credentials needed)
-MONGODB_URI=mongodb://localhost:27017/
+MONGODB_URI=mongodb://localhost:27017/synth_prediction
 
 # Option 2: Local MongoDB with authentication
-# MONGODB_URI=mongodb://username:password@localhost:27017/bitcoin_volatility
+# MONGODB_URI=mongodb://username:password@localhost:27017/synth_prediction
 
 # Option 3: MongoDB Atlas (Cloud) - Replace with your actual credentials
-# MONGODB_URI=mongodb+srv://your_username:your_password@your_cluster.mongodb.net/bitcoin_volatility?retryWrites=true&w=majority
+# MONGODB_URI=mongodb+srv://your_username:your_password@your_cluster.mongodb.net/synth_prediction?retryWrites=true&w=majority
 
 # Option 4: Remote MongoDB server with authentication
-# MONGODB_URI=mongodb://your_username:your_password@remote_host:27017/bitcoin_volatility
+# MONGODB_URI=mongodb://your_username:your_password@remote_host:27017/synth_prediction
 
 # Option 5: MongoDB replica set
-# MONGODB_URI=mongodb://username:password@host1:27017,host2:27017,host3:27017/bitcoin_volatility?replicaSet=myReplicaSet
+# MONGODB_URI=mongodb://username:password@host1:27017,host2:27017,host3:27017/synth_prediction?replicaSet=myReplicaSet
 
 # Database name (if not specified in URI)
-DATABASE_NAME=bitcoin_volatility
+DATABASE_NAME=synth_prediction
 
 # =============================================================================
 # DATA RETENTION SETTINGS
@@ -54,17 +54,17 @@ PERFORMANCE_THRESHOLD=0.05
 # =============================================================================
 
 # --- LOCAL DEVELOPMENT (No authentication) ---
-# MONGODB_URI=mongodb://localhost:27017/
-# DATABASE_NAME=bitcoin_volatility
+# MONGODB_URI=mongodb://localhost:27017/synth_prediction
+# DATABASE_NAME=synth_prediction
 
 # --- LOCAL WITH AUTHENTICATION ---
-# MONGODB_URI=mongodb://admin:password123@localhost:27017/bitcoin_volatility
+# MONGODB_URI=mongodb://admin:password123@localhost:27017/synth_prediction
 
 # --- MONGODB ATLAS (Cloud) EXAMPLE ---
-# MONGODB_URI=mongodb+srv://myuser:mypassword@mycluster.abcde.mongodb.net/bitcoin_volatility?retryWrites=true&w=majority
+# MONGODB_URI=mongodb+srv://myuser:mypassword@mycluster.abcde.mongodb.net/synth_prediction?retryWrites=true&w=majority
 
 # --- DOCKER MONGODB EXAMPLE ---
-# MONGODB_URI=mongodb://root:example@localhost:27017/bitcoin_volatility?authSource=admin
+# MONGODB_URI=mongodb://root:example@localhost:27017/synth_prediction?authSource=admin
 
 # =============================================================================
 # SECURITY NOTES
