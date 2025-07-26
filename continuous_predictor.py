@@ -274,6 +274,7 @@ class ContinuousBitcoinPredictor:
             
             # Get base prediction
             base_prediction = self.predict_and_save(price_data, save_to_db=False)
+            print(f"🔮 Base prediction: {base_prediction}")
             
             # Generate time points for next 24 hours (288 × 5-minute intervals)
             start_time = pd.to_datetime(price_data['timestamp'].iloc[-1])

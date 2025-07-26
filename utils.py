@@ -161,6 +161,409 @@ def monte_carlo_simulation(volatility: float, skewness: float, kurtosis: float,
     return simulation_results, summary_stats
 
 
+def generate_monte_carlo_from_predictions(predictions: List[Dict], initial_price: float,
+                                        num_simulations: int = 1000, 
+                                        time_varying: bool = True) -> Tuple[pd.DataFrame, Dict]:
+    """
+    Generate Monte Carlo simulation using 288 predictions from continuous predictor.
+    
+    This function can handle both time-varying predictions (each 5-minute interval has different
+    volatility, skewness, kurtosis) and constant predictions (using average values).
+    
+    Args:
+        predictions: List of 288 prediction dictionaries from continuous predictor
+        initial_price: Starting Bitcoin price
+        num_simulations: Number of simulation paths
+        time_varying: If True, use time-varying predictions; if False, use average values
+        
+    Returns:
+        Tuple of (simulation_results, summary_stats)
+    """
+    if not predictions or len(predictions) != 288:
+        raise ValueError(f"Expected 288 predictions, got {len(predictions) if predictions else 0}")
+    
+    intervals = 288  # 24 hours × 12 five-minute intervals per hour
+    dt = 1/288  # 5-minute time step
+    
+    if time_varying:
+        # Extract time-varying parameters
+        volatilities = [p['predicted_volatility'] for p in predictions]
+        skewnesses = [p['predicted_skewness'] for p in predictions]
+        kurtoses = [p['predicted_kurtosis'] for p in predictions]
+        
+        # Generate price paths with time-varying parameters
+        price_paths = np.zeros((num_simulations, intervals + 1))
+        price_paths[:, 0] = initial_price
+        
+        for i in range(intervals):
+            # Generate returns for this specific time interval
+            returns = generate_skewed_kurtotic_returns(
+                size=(num_simulations, 1),
+                volatility=volatilities[i],
+                skewness=skewnesses[i],
+                kurtosis=kurtoses[i],
+                dt=dt
+            ).flatten()
+            
+            # Update prices
+            price_paths[:, i + 1] = price_paths[:, i] * (1 + returns)
+            
+    else:
+        # Use average values for constant parameters
+        avg_volatility = np.mean([p['predicted_volatility'] for p in predictions])
+        avg_skewness = np.mean([p['predicted_skewness'] for p in predictions])
+        avg_kurtosis = np.mean([p['predicted_kurtosis'] for p in predictions])
+        
+        # Generate all returns at once using average parameters
+        returns = generate_skewed_kurtotic_returns(
+            size=(num_simulations, intervals),
+            volatility=avg_volatility,
+            skewness=avg_skewness,
+            kurtosis=avg_kurtosis,
+            dt=dt
+        )
+        
+        # Convert returns to price paths
+        price_paths = np.zeros((num_simulations, intervals + 1))
+        price_paths[:, 0] = initial_price
+        
+        for i in range(intervals):
+            price_paths[:, i + 1] = price_paths[:, i] * (1 + returns[:, i])
+    
+    # Create results DataFrame
+    simulation_results = pd.DataFrame(price_paths)
+    simulation_results.index = range(len(simulation_results))
+    
+    # Calculate comprehensive summary statistics
+    final_prices = price_paths[:, -1]
+    returns_all = np.diff(np.log(price_paths), axis=1)
+    
+    summary_stats = {
+        'mean_final_price': final_prices.mean(),
+        'std_final_price': final_prices.std(),
+        'min_final_price': final_prices.min(),
+        'max_final_price': final_prices.max(),
+        'percentile_5': np.percentile(final_prices, 5),
+        'percentile_25': np.percentile(final_prices, 25),
+        'percentile_50': np.percentile(final_prices, 50),
+        'percentile_75': np.percentile(final_prices, 75),
+        'percentile_95': np.percentile(final_prices, 95),
+        'probability_profit': (final_prices > initial_price).mean(),
+        'probability_loss': (final_prices < initial_price).mean(),
+        'max_drawdown': calculate_max_drawdown(price_paths),
+        'volatility_realized': np.std(returns_all) * np.sqrt(1/dt),
+        'skewness_realized': float(stats.skew(returns_all.flatten())),
+        'kurtosis_realized': float(stats.kurtosis(returns_all.flatten())),
+        'var_95': np.percentile(final_prices - initial_price, 5),
+        'cvar_95': np.mean(final_prices[final_prices <= np.percentile(final_prices, 5)] - initial_price),
+        'expected_return': (final_prices.mean() - initial_price) / initial_price,
+        'sharpe_ratio': ((final_prices.mean() - initial_price) / initial_price) / (final_prices.std() / initial_price),
+        'simulation_type': 'time_varying' if time_varying else 'constant_parameters',
+        'num_simulations': num_simulations,
+        'intervals': intervals,
+        'initial_price': initial_price
+    }
+    
+    # Add prediction statistics if available
+    if predictions:
+        pred_volatilities = [p['predicted_volatility'] for p in predictions]
+        pred_skewnesses = [p['predicted_skewness'] for p in predictions]
+        pred_kurtoses = [p['predicted_kurtosis'] for p in predictions]
+        
+        summary_stats.update({
+            'pred_volatility_min': min(pred_volatilities),
+            'pred_volatility_max': max(pred_volatilities),
+            'pred_volatility_mean': np.mean(pred_volatilities),
+            'pred_skewness_min': min(pred_skewnesses),
+            'pred_skewness_max': max(pred_skewnesses),
+            'pred_skewness_mean': np.mean(pred_skewnesses),
+            'pred_kurtosis_min': min(pred_kurtoses),
+            'pred_kurtosis_max': max(pred_kurtoses),
+            'pred_kurtosis_mean': np.mean(pred_kurtoses)
+        })
+    
+    return simulation_results, summary_stats
+
+
+def plot_enhanced_monte_carlo_results(simulation_results: pd.DataFrame, summary_stats: Dict,
+                                    initial_price: float, predictions: List[Dict] = None,
+                                    save_path: str = None) -> None:
+    """
+    Create enhanced plots for Monte Carlo simulation results with prediction analysis.
+    
+    Args:
+        simulation_results: DataFrame with simulation results
+        summary_stats: Dictionary with summary statistics
+        initial_price: Starting price
+        predictions: List of 288 predictions (optional, for prediction analysis)
+        save_path: Path to save the plot (optional)
+    """
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    fig.suptitle('Enhanced Monte Carlo Simulation Results', fontsize=16, fontweight='bold')
+    
+    # 1. Price path evolution
+    num_paths_to_plot = min(100, simulation_results.shape[1])
+    selected_paths = np.random.choice(simulation_results.columns, num_paths_to_plot, replace=False)
+    
+    for path in selected_paths:
+        axes[0, 0].plot(simulation_results.index, simulation_results[path], 
+                       alpha=0.1, color='blue', linewidth=0.5)
+    
+    # Add percentiles
+    percentiles = [5, 25, 50, 75, 95]
+    colors = ['red', 'orange', 'green', 'orange', 'red']
+    
+    for p, color in zip(percentiles, colors):
+        values = simulation_results.quantile(p/100, axis=1)
+        axes[0, 0].plot(simulation_results.index, values, 
+                       color=color, linewidth=2, label=f'{p}th percentile')
+    
+    axes[0, 0].axhline(y=initial_price, color='black', linestyle='--', label='Initial Price')
+    axes[0, 0].set_title('Monte Carlo Price Paths')
+    axes[0, 0].set_xlabel('Time Steps (5-min intervals)')
+    axes[0, 0].set_ylabel('Price ($)')
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # 2. Final price distribution
+    final_prices = simulation_results.iloc[-1]
+    axes[0, 1].hist(final_prices, bins=50, alpha=0.7, density=True, color='skyblue')
+    axes[0, 1].axvline(initial_price, color='black', linestyle='--', label='Initial Price')
+    axes[0, 1].axvline(summary_stats['mean_final_price'], color='red', linestyle='-', label='Mean Final Price')
+    axes[0, 1].axvline(summary_stats['percentile_5'], color='orange', linestyle=':', label='5th Percentile')
+    axes[0, 1].axvline(summary_stats['percentile_95'], color='orange', linestyle=':', label='95th Percentile')
+    axes[0, 1].set_title('Final Price Distribution')
+    axes[0, 1].set_xlabel('Final Price ($)')
+    axes[0, 1].set_ylabel('Density')
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # 3. Risk metrics
+    risk_metrics = {
+        'Probability of Profit': f"{summary_stats['probability_profit']:.1%}",
+        'Probability of Loss': f"{summary_stats['probability_loss']:.1%}",
+        'Max Drawdown': f"{summary_stats['max_drawdown']:.2%}",
+        'VaR (95%)': f"${summary_stats['var_95']:,.2f}",
+        'CVaR (95%)': f"${summary_stats['cvar_95']:,.2f}",
+        'Expected Return': f"{summary_stats['expected_return']:.2%}",
+        'Sharpe Ratio': f"{summary_stats['sharpe_ratio']:.3f}"
+    }
+    
+    y_pos = np.arange(len(risk_metrics))
+    axes[0, 2].barh(y_pos, [float(v.replace('%', '').replace('$', '').replace(',', '')) 
+                           if '%' in v or '$' in v else float(v) for v in risk_metrics.values()])
+    axes[0, 2].set_yticks(y_pos)
+    axes[0, 2].set_yticklabels(risk_metrics.keys())
+    axes[0, 2].set_title('Risk Metrics')
+    axes[0, 2].grid(True, alpha=0.3)
+    
+    # 4. Prediction analysis (if predictions provided)
+    if predictions:
+        pred_volatilities = [p['predicted_volatility'] for p in predictions]
+        pred_skewnesses = [p['predicted_skewness'] for p in predictions]
+        pred_kurtoses = [p['predicted_kurtosis'] for p in predictions]
+        
+        time_points = range(len(predictions))
+        
+        axes[1, 0].plot(time_points, pred_volatilities, color='red', linewidth=2, label='Predicted Volatility')
+        axes[1, 0].axhline(y=summary_stats.get('pred_volatility_mean', 0), color='red', 
+                          linestyle='--', alpha=0.7, label='Mean Volatility')
+        axes[1, 0].set_title('Predicted Volatility Over Time')
+        axes[1, 0].set_xlabel('Time Steps (5-min intervals)')
+        axes[1, 0].set_ylabel('Volatility')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        axes[1, 1].plot(time_points, pred_skewnesses, color='green', linewidth=2, label='Predicted Skewness')
+        axes[1, 1].axhline(y=summary_stats.get('pred_skewness_mean', 0), color='green', 
+                          linestyle='--', alpha=0.7, label='Mean Skewness')
+        axes[1, 1].set_title('Predicted Skewness Over Time')
+        axes[1, 1].set_xlabel('Time Steps (5-min intervals)')
+        axes[1, 1].set_ylabel('Skewness')
+        axes[1, 1].legend()
+        axes[1, 1].grid(True, alpha=0.3)
+        
+        axes[1, 2].plot(time_points, pred_kurtoses, color='purple', linewidth=2, label='Predicted Kurtosis')
+        axes[1, 2].axhline(y=summary_stats.get('pred_kurtosis_mean', 0), color='purple', 
+                          linestyle='--', alpha=0.7, label='Mean Kurtosis')
+        axes[1, 2].set_title('Predicted Kurtosis Over Time')
+        axes[1, 2].set_xlabel('Time Steps (5-min intervals)')
+        axes[1, 2].set_ylabel('Kurtosis')
+        axes[1, 2].legend()
+        axes[1, 2].grid(True, alpha=0.3)
+    else:
+        # If no predictions, show summary statistics
+        summary_text = f"""
+        Simulation Summary:
+        
+        Initial Price: ${initial_price:,.2f}
+        Mean Final Price: ${summary_stats['mean_final_price']:,.2f}
+        Std Final Price: ${summary_stats['std_final_price']:,.2f}
+        
+        Min Price: ${summary_stats['min_final_price']:,.2f}
+        Max Price: ${summary_stats['max_final_price']:,.2f}
+        
+        5th Percentile: ${summary_stats['percentile_5']:,.2f}
+        95th Percentile: ${summary_stats['percentile_95']:,.2f}
+        
+        Probability of Profit: {summary_stats['probability_profit']:.1%}
+        Expected Return: {summary_stats['expected_return']:.2%}
+        Sharpe Ratio: {summary_stats['sharpe_ratio']:.3f}
+        
+        Simulation Type: {summary_stats['simulation_type']}
+        Number of Simulations: {summary_stats['num_simulations']:,}
+        """
+        
+        axes[1, 0].text(0.1, 0.9, summary_text, transform=axes[1, 0].transAxes, 
+                       fontsize=10, verticalalignment='top', fontfamily='monospace')
+        axes[1, 0].set_title('Simulation Summary')
+        axes[1, 0].axis('off')
+        
+        # Hide other subplots
+        axes[1, 1].axis('off')
+        axes[1, 2].axis('off')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"📊 Enhanced Monte Carlo plot saved to: {save_path}")
+    
+    plt.show()
+
+
+def example_monte_carlo_with_predictions():
+    """
+    Example function showing how to use the new Monte Carlo simulation with 288 predictions.
+    This demonstrates both time-varying and constant parameter approaches.
+    """
+    print("🚀 Example: Monte Carlo Simulation with 288 Predictions")
+    print("=" * 60)
+    
+    # Simulate 288 predictions (in real use, these would come from continuous_predictor.py)
+    print("📊 Generating sample 288 predictions...")
+    
+    # Create sample predictions with realistic patterns
+    predictions = []
+    base_volatility = 0.025  # 2.5% base volatility
+    base_skewness = -0.1     # Slight negative skewness
+    base_kurtosis = 4.0      # Fat tails
+    
+    for i in range(288):
+        # Add time-varying patterns (US trading hours, weekends, etc.)
+        hour = (i // 12) % 24  # Hour of day (0-23)
+        
+        # US trading hours effect (14:30-21:00 UTC = 9:30 AM-4:00 PM EST)
+        if 14 <= hour <= 21:
+            vol_multiplier = 1.3
+        elif 22 <= hour <= 2:
+            vol_multiplier = 1.1
+        elif 3 <= hour <= 9:
+            vol_multiplier = 0.9
+        else:
+            vol_multiplier = 0.7
+        
+        # Weekend effect
+        day_of_week = (i // (24 * 12)) % 7  # Day of week (0=Monday, 6=Sunday)
+        if day_of_week >= 5:  # Weekend
+            vol_multiplier *= 0.6
+        
+        # Add some realistic variation
+        noise = np.random.normal(1.0, 0.05)
+        final_vol_multiplier = vol_multiplier * noise
+        
+        prediction = {
+            'sequence_number': i + 1,
+            'timestamp': f"2024-01-15T{(hour):02d}:{(i % 12) * 5:02d}:00",
+            'minutes_ahead': (i + 1) * 5,
+            'predicted_volatility': base_volatility * final_vol_multiplier,
+            'predicted_skewness': base_skewness + np.random.normal(0, 0.05),
+            'predicted_kurtosis': base_kurtosis + np.random.normal(0, 0.2),
+            'current_price': 45000.0,
+            'is_us_trading_hours': 14 <= hour <= 21,
+            'is_weekend': day_of_week >= 5
+        }
+        predictions.append(prediction)
+    
+    print(f"✅ Generated {len(predictions)} sample predictions")
+    
+    # Example 1: Time-varying Monte Carlo simulation
+    print("\n🔮 Example 1: Time-varying Monte Carlo Simulation")
+    print("-" * 50)
+    
+    initial_price = 45000.0
+    num_simulations = 1000
+    
+    simulation_results, summary_stats = generate_monte_carlo_from_predictions(
+        predictions=predictions,
+        initial_price=initial_price,
+        num_simulations=num_simulations,
+        time_varying=True  # Use time-varying parameters
+    )
+    
+    print(f"📊 Time-varying simulation results:")
+    print(f"   Mean final price: ${summary_stats['mean_final_price']:,.2f}")
+    print(f"   Probability of profit: {summary_stats['probability_profit']:.1%}")
+    print(f"   Expected return: {summary_stats['expected_return']:.2%}")
+    print(f"   Sharpe ratio: {summary_stats['sharpe_ratio']:.3f}")
+    print(f"   VaR (95%): ${summary_stats['var_95']:,.2f}")
+    print(f"   Max drawdown: {summary_stats['max_drawdown']:.2%}")
+    
+    # Example 2: Constant parameter Monte Carlo simulation
+    print("\n🔮 Example 2: Constant Parameter Monte Carlo Simulation")
+    print("-" * 50)
+    
+    simulation_results_const, summary_stats_const = generate_monte_carlo_from_predictions(
+        predictions=predictions,
+        initial_price=initial_price,
+        num_simulations=num_simulations,
+        time_varying=False  # Use average parameters
+    )
+    
+    print(f"📊 Constant parameter simulation results:")
+    print(f"   Mean final price: ${summary_stats_const['mean_final_price']:,.2f}")
+    print(f"   Probability of profit: {summary_stats_const['probability_profit']:.1%}")
+    print(f"   Expected return: {summary_stats_const['expected_return']:.2%}")
+    print(f"   Sharpe ratio: {summary_stats_const['sharpe_ratio']:.3f}")
+    print(f"   VaR (95%): ${summary_stats_const['var_95']:,.2f}")
+    print(f"   Max drawdown: {summary_stats_const['max_drawdown']:.2%}")
+    
+    # Compare the two approaches
+    print("\n📈 Comparison: Time-varying vs Constant Parameters")
+    print("-" * 50)
+    print(f"   Mean Final Price:")
+    print(f"     Time-varying: ${summary_stats['mean_final_price']:,.2f}")
+    print(f"     Constant:     ${summary_stats_const['mean_final_price']:,.2f}")
+    print(f"     Difference:   ${summary_stats['mean_final_price'] - summary_stats_const['mean_final_price']:,.2f}")
+    
+    print(f"\n   Probability of Profit:")
+    print(f"     Time-varying: {summary_stats['probability_profit']:.1%}")
+    print(f"     Constant:     {summary_stats_const['probability_profit']:.1%}")
+    print(f"     Difference:   {summary_stats['probability_profit'] - summary_stats_const['probability_profit']:.1%}")
+    
+    print(f"\n   Expected Return:")
+    print(f"     Time-varying: {summary_stats['expected_return']:.2%}")
+    print(f"     Constant:     {summary_stats_const['expected_return']:.2%}")
+    print(f"     Difference:   {summary_stats['expected_return'] - summary_stats_const['expected_return']:.2%}")
+    
+    # Create enhanced plots
+    print("\n📊 Creating enhanced visualization...")
+    plot_enhanced_monte_carlo_results(
+        simulation_results=simulation_results,
+        summary_stats=summary_stats,
+        initial_price=initial_price,
+        predictions=predictions,
+        save_path='results/enhanced_monte_carlo_example.png'
+    )
+    
+    print("\n✅ Example completed!")
+    print("\n💡 Usage with continuous predictor:")
+    print("   1. Get 288 predictions from continuous_predictor.py")
+    print("   2. Pass predictions to generate_monte_carlo_from_predictions()")
+    print("   3. Use plot_enhanced_monte_carlo_results() for visualization")
+    print("   4. Choose time_varying=True for more realistic simulations")
+
+
 def generate_skewed_kurtotic_returns(size: Tuple[int, int], volatility: float,
                                    skewness: float, kurtosis: float, dt: float) -> np.ndarray:
     """

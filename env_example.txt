@@ -50,6 +50,15 @@ MIN_NEW_DATA_POINTS=288
 PERFORMANCE_THRESHOLD=0.05
 
 # =============================================================================
+# PREDICTION INTERVAL CONFIGURATION
+# =============================================================================
+
+# How often to generate new predictions (in minutes)
+# Options: 1, 2, 5, 10, 15, 30, 60
+# Note: Lower intervals = more frequent predictions but higher resource usage
+PREDICTION_INTERVAL_MINUTES=5
+
+# =============================================================================
 # EXAMPLES FOR DIFFERENT MONGODB SETUPS
 # =============================================================================
 
