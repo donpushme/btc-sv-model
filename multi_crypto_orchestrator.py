@@ -290,7 +290,8 @@ def main():
             crypto_symbols = sys.argv[1:]
             print(f"📊 Running for specified cryptocurrencies: {', '.join(crypto_symbols)}")
         else:
-            print(f"📊 Running for all supported cryptocurrencies: {', '.join(Config.SUPPORTED_CRYPTOS.keys())}")
+            crypto_symbols = list(Config.SUPPORTED_CRYPTOS.keys())
+            print(f"📊 Running for all supported cryptocurrencies: {', '.join(crypto_symbols)}")
         
         # Pre-flight check: Verify models exist
         print("\n🔍 Pre-flight check: Verifying trained models...")
