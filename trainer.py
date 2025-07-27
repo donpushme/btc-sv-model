@@ -516,6 +516,19 @@ class CryptoVolatilityTrainer:
         print(f"Final recent dataset shape: {recent_df.shape}")
         
         # Check if we still have enough data after preprocessing
+        if len(recent_df) == 0:
+            print(f"❌ No data points after preprocessing. This indicates a data quality issue.")
+            print(f"💡 Possible causes:")
+            print(f"   - Insufficient data for rolling window calculations")
+            print(f"   - Too many NaN values in the data")
+            print(f"   - Prediction horizon too large for available data")
+            print(f"   - Data quality issues (missing timestamps, invalid prices)")
+            return {
+                'success': False,
+                'error': f'No data points after preprocessing. Data quality issue detected.',
+                'data_points': 0
+            }
+        
         if len(recent_df) < 50:
             print(f"❌ Insufficient data after preprocessing: {len(recent_df)} < 50 minimum required")
             return {

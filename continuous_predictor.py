@@ -705,8 +705,10 @@ class ContinuousCryptoPredictor:
             else:
                 if training_results and 'error' in training_results:
                     print(f"❌ Background retraining failed: {training_results['error']}")
+                    print(f"💡 Error details: {training_results}")
                 else:
                     print(f"❌ Background retraining failed")
+                    print(f"💡 Training results: {training_results}")
                 return False
                 
         except Exception as e:

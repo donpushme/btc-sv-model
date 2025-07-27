@@ -143,28 +143,44 @@ class CryptoDataProcessor:
         df['target_skewness'] = np.nan
         df['target_kurtosis'] = np.nan
         
+        # For limited data, use a shorter prediction horizon
+        available_data = len(df)
+        if available_data < prediction_horizon * 2:
+            # If we have very limited data, use a shorter horizon
+            adaptive_horizon = max(24, available_data // 4)  # At least 24 periods, max 1/4 of data
+            print(f"⚠️ Limited data ({available_data} points). Using adaptive prediction horizon: {adaptive_horizon}")
+            prediction_horizon = adaptive_horizon
+        
         # Calculate targets for each time point
         for i in range(len(df) - prediction_horizon):
             future_returns = df['return'].iloc[i+1:i+1+prediction_horizon]
             
-            if len(future_returns) == prediction_horizon and not future_returns.isna().any():
-                volatility = future_returns.std()
-                skewness = future_returns.skew()
-                kurtosis = future_returns.kurt()  # This is excess kurtosis
+            if len(future_returns) >= prediction_horizon * 0.8:  # Allow 20% tolerance
+                # Remove any NaN values from future returns
+                future_returns = future_returns.dropna()
                 
-                # Convert excess kurtosis to absolute kurtosis and apply bounds
-                absolute_kurtosis = kurtosis + 3  # Convert to absolute kurtosis
-                
-                # Apply reasonable bounds for kurtosis (3 to 30)
-                # Normal distribution has kurtosis = 3, extreme values capped at 30
-                absolute_kurtosis = max(min(absolute_kurtosis, 30.0), 3.0)
-                
-                # Convert back to excess kurtosis for consistency
-                excess_kurtosis = absolute_kurtosis - 3
-                
-                df.loc[i, 'target_volatility'] = volatility
-                df.loc[i, 'target_skewness'] = skewness
-                df.loc[i, 'target_kurtosis'] = excess_kurtosis
+                if len(future_returns) >= prediction_horizon * 0.5:  # Need at least 50% of expected data
+                    volatility = future_returns.std()
+                    skewness = future_returns.skew()
+                    kurtosis = future_returns.kurt()  # This is excess kurtosis
+                    
+                    # Handle NaN values in statistics
+                    if pd.isna(volatility) or pd.isna(skewness) or pd.isna(kurtosis):
+                        continue
+                    
+                    # Convert excess kurtosis to absolute kurtosis and apply bounds
+                    absolute_kurtosis = kurtosis + 3  # Convert to absolute kurtosis
+                    
+                    # Apply reasonable bounds for kurtosis (3 to 30)
+                    # Normal distribution has kurtosis = 3, extreme values capped at 30
+                    absolute_kurtosis = max(min(absolute_kurtosis, 30.0), 3.0)
+                    
+                    # Convert back to excess kurtosis for consistency
+                    excess_kurtosis = absolute_kurtosis - 3
+                    
+                    df.loc[i, 'target_volatility'] = volatility
+                    df.loc[i, 'target_skewness'] = skewness
+                    df.loc[i, 'target_kurtosis'] = excess_kurtosis
         
         return df
     
@@ -188,13 +204,41 @@ class CryptoDataProcessor:
         print("Calculating target statistics...")
         df = self.calculate_target_statistics(df, prediction_horizon)
         
-        # Remove rows with NaN values
+        # Check for NaN values before removal
         initial_rows = len(df)
+        nan_counts = df.isna().sum()
+        print(f"📊 NaN counts by column:")
+        for col, count in nan_counts[nan_counts > 0].items():
+            print(f"  {col}: {count} NaN values")
+        
+        # Remove rows with NaN values
         df = df.dropna().reset_index(drop=True)
         final_rows = len(df)
         
         print(f"Removed {initial_rows - final_rows} rows with NaN values")
         print(f"Final dataset shape: {df.shape}")
+        
+        # If we have very few data points, try to fill some NaN values
+        if final_rows < 50 and initial_rows > 100:
+            print(f"⚠️ Very limited data after preprocessing ({final_rows} points). Attempting to fill some NaN values...")
+            
+            # Try to fill target NaN values with reasonable defaults
+            df_filled = df.copy()
+            df_filled['target_volatility'] = df_filled['target_volatility'].fillna(0.02)  # 2% volatility
+            df_filled['target_skewness'] = df_filled['target_skewness'].fillna(0.0)  # No skew
+            df_filled['target_kurtosis'] = df_filled['target_kurtosis'].fillna(0.0)  # Normal kurtosis
+            
+            # Remove remaining NaN values
+            df_filled = df_filled.dropna().reset_index(drop=True)
+            filled_rows = len(df_filled)
+            
+            if filled_rows > final_rows:
+                print(f"✅ Filled NaN values: {final_rows} -> {filled_rows} data points")
+                df = df_filled
+                final_rows = filled_rows
+        
+        if final_rows == 0:
+            raise ValueError(f"❌ No valid data points after preprocessing. Initial: {initial_rows}, Final: {final_rows}")
         
         self.processed_data = df
         return df
