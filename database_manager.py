@@ -15,6 +15,8 @@ import pymongo
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from bson import ObjectId
 import warnings
+import dotenv
+dotenv.load_dotenv()
 
 class DatabaseManager:
     """
