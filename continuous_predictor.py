@@ -611,16 +611,36 @@ class ContinuousBitcoinPredictor:
         try:
             start_time = datetime.utcnow()
             
-            # Get recent training data
+            # Check training data availability first
+            print("🔍 Checking training data availability...")
+            availability_info = self.db_manager.check_training_data_availability()
+            
+            # Get recent training data with fallback to all data
+            print(f"📊 Retrieving training data for retraining...")
             training_data = self.db_manager.get_training_data_for_update(
-                hours=self.retrain_interval_hours * 2  # Get extra data for better training
+                hours=self.retrain_interval_hours * 2,  # Get extra data for better training
+                fallback_to_all=True  # Fallback to all available data if recent data is insufficient
             )
+            
+            print(f"📊 Retrieved {len(training_data)} training data points")
+            
+            if len(training_data) == 0:
+                print("❌ No training data available for retraining")
+                return False
             
             if len(training_data) < self.min_new_data_points:
                 print(f"⚠️ Insufficient training data: {len(training_data)} < {self.min_new_data_points}")
+                print("💡 Consider reducing min_new_data_points or collecting more data")
+                return False
+            
+            # Additional check for minimum data requirements
+            if len(training_data) < 100:
+                print(f"⚠️ Very limited training data: {len(training_data)} < 100 minimum for retraining")
+                print("💡 This might cause training issues. Consider collecting more data first.")
                 return False
             
             print(f"📊 Background retraining with {len(training_data)} data points")
+            print(f"📊 Data date range: {training_data['timestamp'].min()} to {training_data['timestamp'].max()}")
             
             # Save training data to temporary CSV for trainer
             import tempfile
@@ -632,9 +652,11 @@ class ContinuousBitcoinPredictor:
                     temp_csv = f.name
                     training_data.to_csv(temp_csv, index=False)
                 
-                # Perform training
-                training_results = self.trainer.train(temp_csv)
-                success = training_results is not None
+                print(f"💾 Saved training data to temporary file: {temp_csv}")
+                
+                # Perform retraining with recent data
+                training_results = self.trainer.retrain_with_current_data(temp_csv, days_back=30)
+                success = training_results is not None and training_results.get('success', False)
                 
             finally:
                 # Clean up temporary file
@@ -659,7 +681,10 @@ class ContinuousBitcoinPredictor:
                     print(f"⚠️ Failed to reload predictor: {str(e)}")
                     return False
             else:
-                print(f"❌ Background retraining failed")
+                if training_results and 'error' in training_results:
+                    print(f"❌ Background retraining failed: {training_results['error']}")
+                else:
+                    print(f"❌ Background retraining failed")
                 return False
                 
         except Exception as e:

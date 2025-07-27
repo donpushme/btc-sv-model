@@ -279,12 +279,13 @@ class DatabaseManager:
             print(f"❌ Failed to get recent predictions: {str(e)}")
             return pd.DataFrame()
     
-    def get_training_data_for_update(self, hours: int = 168) -> pd.DataFrame:
+    def get_training_data_for_update(self, hours: int = 168, fallback_to_all: bool = True) -> pd.DataFrame:
         """
         Get recent training data for model updates.
         
         Args:
             hours: Number of hours of data to retrieve (default: 7 days)
+            fallback_to_all: If no recent data found, try to get all available data
             
         Returns:
             pd.DataFrame: Combined training data
@@ -292,15 +293,39 @@ class DatabaseManager:
         try:
             cutoff_time = datetime.utcnow() - timedelta(hours=hours)
             
-            # Get recent training data
+            # First try to get recent training data
             cursor = self.training_data_collection.find(
                 {"saved_at": {"$gte": cutoff_time}}
             ).sort("saved_at", DESCENDING)
             
             all_data = []
+            docs_found = 0
+            
             for doc in cursor:
-                if 'data' in doc:
+                docs_found += 1
+                if 'data' in doc and isinstance(doc['data'], list):
                     all_data.extend(doc['data'])
+                else:
+                    print(f"⚠️ Document {doc.get('_id')} missing or invalid 'data' field")
+            
+            print(f"📊 Found {docs_found} documents with saved_at >= {cutoff_time}")
+            
+            # If no recent data found and fallback is enabled, try to get all data
+            if not all_data and fallback_to_all:
+                print("📊 No recent data found, trying to get all available training data...")
+                
+                cursor = self.training_data_collection.find().sort("saved_at", DESCENDING)
+                all_data = []
+                docs_found = 0
+                
+                for doc in cursor:
+                    docs_found += 1
+                    if 'data' in doc and isinstance(doc['data'], list):
+                        all_data.extend(doc['data'])
+                    else:
+                        print(f"⚠️ Document {doc.get('_id')} missing or invalid 'data' field")
+                
+                print(f"📊 Found {docs_found} total documents in training_data collection")
             
             if all_data:
                 df = pd.DataFrame(all_data)
@@ -309,10 +334,11 @@ class DatabaseManager:
                 # Remove duplicates and sort
                 df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
                 
-                print(f"📊 Retrieved {len(df)} training records from last {hours} hours")
+                print(f"📊 Retrieved {len(df)} training records (from {len(all_data)} total records)")
+                print(f"📊 Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
                 return df
             else:
-                print(f"📊 No training data found in last {hours} hours")
+                print(f"📊 No training data found in database")
                 return pd.DataFrame()
                 
         except Exception as e:
@@ -445,6 +471,62 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"❌ Failed to get database stats: {str(e)}")
+            return {}
+    
+    def check_training_data_availability(self) -> Dict:
+        """
+        Check training data availability and structure.
+        
+        Returns:
+            Dict: Training data availability information
+        """
+        try:
+            # Get total count
+            total_docs = self.training_data_collection.count_documents({})
+            
+            # Get recent docs
+            recent_docs = self.training_data_collection.count_documents({
+                "saved_at": {"$gte": datetime.utcnow() - timedelta(hours=168)}
+            })
+            
+            # Check for documents with data field
+            docs_with_data = self.training_data_collection.count_documents({
+                "data": {"$exists": True}
+            })
+            
+            # Check for documents with valid data arrays
+            docs_with_valid_data = self.training_data_collection.count_documents({
+                "data": {"$type": "array", "$ne": []}
+            })
+            
+            # Get oldest and newest saved_at timestamps
+            oldest_doc = self.training_data_collection.find_one(
+                {}, {"saved_at": 1}, sort=[("saved_at", 1)]
+            )
+            newest_doc = self.training_data_collection.find_one(
+                {}, {"saved_at": 1}, sort=[("saved_at", -1)]
+            )
+            
+            info = {
+                "total_documents": total_docs,
+                "recent_documents_7d": recent_docs,
+                "documents_with_data_field": docs_with_data,
+                "documents_with_valid_data": docs_with_valid_data,
+                "oldest_saved_at": oldest_doc.get("saved_at") if oldest_doc else None,
+                "newest_saved_at": newest_doc.get("saved_at") if newest_doc else None
+            }
+            
+            print("📊 Training Data Availability:")
+            for key, value in info.items():
+                if "saved_at" in key:
+                    print(f"  {key}: {value}")
+                else:
+                    print(f"  {key}: {value}")
+            
+            return info
+            
+        except Exception as e:
+            print(f"❌ Failed to check training data availability: {str(e)}")
             return {}
     
     def close_connection(self):

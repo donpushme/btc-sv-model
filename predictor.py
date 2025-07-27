@@ -87,6 +87,33 @@ class RealTimeVolatilityPredictor:
         except Exception as e:
             raise Exception(f"Failed to load model: {str(e)}")
     
+    def load_latest_model(self) -> None:
+        """
+        Load the most recent trained model automatically.
+        """
+        if not os.path.exists(self.config.MODEL_SAVE_PATH):
+            raise ValueError(f"Model directory not found: {self.config.MODEL_SAVE_PATH}")
+        
+        # Find all model files
+        model_files = [f for f in os.listdir(self.config.MODEL_SAVE_PATH) 
+                      if f.startswith('model_') and f.endswith('.pth')]
+        
+        if not model_files:
+            raise ValueError("No trained models found. Please train a model first.")
+        
+        # Sort by timestamp (newest first)
+        model_files.sort(reverse=True)
+        latest_model_file = model_files[0]
+        
+        # Extract model version from filename
+        model_version = latest_model_file.replace('model_', '').replace('.pth', '')
+        
+        # Load the latest model
+        model_path = os.path.join(self.config.MODEL_SAVE_PATH, latest_model_file)
+        self.load_model(model_path)
+        
+        print(f"✅ Loaded latest model: {model_version}")
+    
     def preprocess_input_data(self, price_data: pd.DataFrame) -> pd.DataFrame:
         """
         Preprocess raw price data for prediction.
@@ -267,6 +294,130 @@ class RealTimeVolatilityPredictor:
         })
         
         return predictions_df
+    
+    def predict_for_timestamp(self, price_data: pd.DataFrame, target_timestamp: str,
+                             current_price: Optional[float] = None) -> Dict[str, float]:
+        """
+        Predict volatility, skewness, and kurtosis for a specific timestamp.
+        
+        Args:
+            price_data: Historical price data DataFrame
+            target_timestamp: Target timestamp to predict for (format: 'YYYY-MM-DD HH:MM:SS')
+            current_price: Current Bitcoin price (optional, will use close price at target time if not provided)
+            
+        Returns:
+            Dictionary with predictions
+        """
+        if self.model is None:
+            raise ValueError("Model not loaded. Please load a model first.")
+        
+        # Convert timestamp to datetime
+        target_dt = pd.to_datetime(target_timestamp)
+        
+        # Find the index of the target timestamp in the data
+        price_data['timestamp'] = pd.to_datetime(price_data['timestamp'])
+        target_idx = price_data[price_data['timestamp'] == target_dt].index
+        
+        if len(target_idx) == 0:
+            raise ValueError(f"Target timestamp {target_timestamp} not found in data")
+        
+        target_idx = target_idx[0]
+        
+        # Ensure we have enough historical data for the sequence
+        if target_idx < self.config.SEQUENCE_LENGTH:
+            raise ValueError(f"Not enough historical data. Need at least {self.config.SEQUENCE_LENGTH} periods before {target_timestamp}")
+        
+        # Get the data up to the target timestamp (exclusive)
+        historical_data = price_data.iloc[:target_idx]
+        
+        # Preprocess the historical data
+        df = self.preprocess_input_data(historical_data)
+        
+        # Ensure we have the required features
+        missing_features = [col for col in self.feature_cols if col not in df.columns]
+        if missing_features:
+            raise ValueError(f"Missing required features: {missing_features}")
+        
+        # Scale the features
+        df_scaled = df.copy()
+        df_scaled[self.feature_cols] = self.feature_engineer.scalers['features'].transform(
+            df[self.feature_cols]
+        )
+        
+        # Prepare input sequence (last SEQUENCE_LENGTH periods before target)
+        input_sequence = df_scaled[self.feature_cols].iloc[-self.config.SEQUENCE_LENGTH:].values
+        input_tensor = torch.FloatTensor(input_sequence).unsqueeze(0).to(self.device)
+        
+        # Make prediction
+        with torch.no_grad():
+            prediction = self.model(input_tensor)
+            prediction_np = prediction.cpu().numpy()
+        
+        # Inverse transform to original scale
+        prediction_original = self.feature_engineer.inverse_transform_targets(prediction_np)
+        
+        # Extract individual predictions
+        volatility = float(prediction_original[0, 0])
+        skewness = float(prediction_original[0, 1])
+        kurtosis = float(prediction_original[0, 2])
+        
+        # Apply validation bounds to prevent extreme predictions
+        # Volatility should be positive and reasonable (0.001 to 0.1 = 0.1% to 10%)
+        volatility = max(min(volatility, 0.1), 0.001)
+        
+        # Skewness can be negative or positive but should be reasonable (-2 to +2)
+        skewness = max(min(skewness, 2.0), -2.0)
+        
+        # Kurtosis (excess kurtosis) should be reasonable (-1 to +27, corresponding to absolute kurtosis 2-30)
+        kurtosis = max(min(kurtosis, 27.0), -1.0)
+        
+        # Get the actual price at target timestamp
+        if current_price is None:
+            current_price = float(price_data.iloc[target_idx]['close'])
+        
+        # Calculate annualized volatility
+        volatility_annualized = volatility * np.sqrt(288 * 365)  # Annualized from 5-min data
+        
+        # Calculate confidence intervals
+        confidence_interval_lower = current_price * (1 - 2 * volatility)
+        confidence_interval_upper = current_price * (1 + 2 * volatility)
+        
+        # Determine market regime
+        if volatility < 0.01:
+            market_regime = 'low_volatility_stable'
+        elif volatility < 0.025:
+            market_regime = 'moderate_volatility'
+        else:
+            market_regime = 'high_volatility_stress'
+        
+        # Risk assessment
+        if volatility > 0.05 or abs(skewness) > 1.5 or kurtosis > 15:
+            risk_assessment = 'high'
+        elif volatility > 0.025 or abs(skewness) > 0.8 or kurtosis > 8:
+            risk_assessment = 'medium'
+        else:
+            risk_assessment = 'low'
+        
+        # Generate prediction ID
+        prediction_id = f"{target_dt.strftime('%Y%m%d_%H%M%S')}_{int(pd.Timestamp.now().timestamp())}"
+        
+        return {
+            'timestamp': target_timestamp,
+            'current_price': current_price,
+            'predicted_volatility': volatility,
+            'predicted_skewness': skewness,
+            'predicted_kurtosis': kurtosis,
+            'volatility_annualized': volatility_annualized,
+            'prediction_period': '24_hours',
+            'confidence_interval_lower': confidence_interval_lower,
+            'confidence_interval_upper': confidence_interval_upper,
+            'market_regime': market_regime,
+            'risk_assessment': risk_assessment,
+            'model_version': self.model_version,
+            'prediction_id': prediction_id,
+            'source': 'Historical Analysis',
+            'prediction_type': 'historical_timestamp'
+        }
     
     def _classify_market_regime(self, volatility: float, skewness: float, 
                                kurtosis: float) -> str:

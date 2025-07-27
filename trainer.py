@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
+import pickle
 
 from config import Config
 from model import VolatilityLSTM, VolatilityLoss, init_model
@@ -294,32 +295,57 @@ class BitcoinVolatilityTrainer:
         return training_history
     
     def save_model(self, epoch: int, train_metrics: Dict, val_metrics: Dict, 
-                   feature_cols: List[str], target_cols: List[str]):
-        """
-        Save model checkpoint with metadata.
-        """
-        checkpoint = {
-            'epoch': epoch,
+                  feature_cols: List[str], target_cols: List[str], suffix: str = "") -> None:
+        """Save the trained model and metadata."""
+        
+        # Create model directory if it doesn't exist
+        os.makedirs(self.config.MODEL_SAVE_PATH, exist_ok=True)
+        
+        # Generate timestamp for model version
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_version = f"{timestamp}{suffix}"
+        
+        # Save model state
+        model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"model_{model_version}.pth")
+        torch.save({
             'model_state_dict': self.model.state_dict(),
-            'config': {
-                'INPUT_SIZE': self.config.INPUT_SIZE,
-                'HIDDEN_SIZE': self.config.HIDDEN_SIZE,
-                'NUM_LAYERS': self.config.NUM_LAYERS,
-                'OUTPUT_SIZE': self.config.OUTPUT_SIZE,
-                'DROPOUT': self.config.DROPOUT,
-                'SEQUENCE_LENGTH': self.config.SEQUENCE_LENGTH
-            },
+            'config': self.config,
             'feature_cols': feature_cols,
             'target_cols': target_cols,
-            'feature_scaler': self.feature_engineer.scalers['features'],
-            'target_scaler': self.feature_engineer.scalers['targets'],
+            'epoch': epoch,
             'train_metrics': train_metrics,
             'val_metrics': val_metrics,
-            'timestamp': datetime.now().isoformat()
+            'model_version': model_version
+        }, model_path)
+        
+        print(f"Model saved to {model_path}")
+        
+        # Save feature engineer state
+        feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"feature_engineer_{model_version}.pkl")
+        with open(feature_engineer_path, 'wb') as f:
+            pickle.dump(self.feature_engineer, f)
+        
+        print(f"Feature engineer saved to {feature_engineer_path}")
+        
+        # Save model metadata
+        metadata = {
+            'model_version': model_version,
+            'timestamp': timestamp,
+            'epoch': epoch,
+            'feature_cols': feature_cols,
+            'target_cols': target_cols,
+            'num_features': len(feature_cols),
+            'train_metrics': train_metrics,
+            'val_metrics': val_metrics,
+            'model_path': model_path,
+            'feature_engineer_path': feature_engineer_path
         }
         
-        torch.save(checkpoint, os.path.join(self.config.MODEL_SAVE_PATH, 'best_model.pth'))
-        print(f"Model saved with validation loss: {val_metrics['total_loss']:.6f}")
+        metadata_path = os.path.join(self.config.MODEL_SAVE_PATH, f"metadata_{model_version}.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        print(f"Model metadata saved to {metadata_path}")
     
     def save_training_history(self, history: Dict):
         """
@@ -392,6 +418,218 @@ class BitcoinVolatilityTrainer:
         plt.close()
         
         print(f"Training plots saved to {self.config.RESULTS_PATH}")
+
+    def retrain_with_current_data(self, csv_path: str, days_back: int = 30, 
+                                 preserve_weights: bool = True) -> Dict:
+        """
+        Retrain the model with only recent data for adaptation to current market conditions.
+        
+        Args:
+            csv_path: Path to the data CSV file
+            days_back: Number of days of recent data to use for retraining
+            preserve_weights: Whether to preserve existing model weights as initialization
+            
+        Returns:
+            Dictionary with retraining results
+        """
+        print(f"🔄 Retraining with recent data (last {days_back} days)...")
+        
+        # Load the data
+        processor = BitcoinDataProcessor(csv_path)
+        df = processor.load_data()
+        
+        # Filter to recent data only
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        cutoff_date = df['timestamp'].max() - pd.Timedelta(days=days_back)
+        recent_df = df[df['timestamp'] >= cutoff_date].copy()
+        
+        print(f"📊 Using {len(recent_df):,} data points from {cutoff_date.strftime('%Y-%m-%d')} to {df['timestamp'].max().strftime('%Y-%m-%d')}")
+        
+        # Check if we have enough data
+        if len(recent_df) < 100:
+            print(f"❌ Insufficient data for retraining: {len(recent_df)} < 100 minimum required")
+            return {
+                'success': False,
+                'error': f'Insufficient data: {len(recent_df)} < 100 minimum required',
+                'data_points': len(recent_df)
+            }
+        
+        if len(recent_df) < 1000:
+            print("⚠️  Warning: Very small dataset for retraining. Consider using more days_back.")
+        
+        # Preprocess the recent data
+        recent_df = processor.preprocess_data(
+            return_windows=self.config.RETURN_WINDOWS,
+            prediction_horizon=self.config.PREDICTION_HORIZON
+        )
+        
+        # Add additional features
+        recent_df = self.feature_engineer.engineer_features(recent_df)
+        
+        # Remove any remaining NaN values
+        recent_df = recent_df.dropna().reset_index(drop=True)
+        print(f"Final recent dataset shape: {recent_df.shape}")
+        
+        # Check if we still have enough data after preprocessing
+        if len(recent_df) < 50:
+            print(f"❌ Insufficient data after preprocessing: {len(recent_df)} < 50 minimum required")
+            return {
+                'success': False,
+                'error': f'Insufficient data after preprocessing: {len(recent_df)} < 50 minimum required',
+                'data_points': len(recent_df)
+            }
+        
+        # Get feature and target columns
+        feature_cols = [col for col in recent_df.columns if col not in 
+                       ['timestamp', 'target_volatility', 'target_skewness', 'target_kurtosis']]
+        target_cols = ['target_volatility', 'target_skewness', 'target_kurtosis']
+        
+        print(f"Number of features: {len(feature_cols)}")
+        
+        # Update config with actual input size
+        self.config.INPUT_SIZE = len(feature_cols)
+        
+        # Fit scalers on the recent data
+        self.feature_engineer.fit_scalers(recent_df, feature_cols, target_cols)
+        
+        # Scale the data
+        recent_df_scaled = self.feature_engineer.transform_data(recent_df, feature_cols, target_cols)
+        
+        # Prepare sequences
+        X, y = self.feature_engineer.prepare_sequences(
+            recent_df_scaled, feature_cols, target_cols, self.config.SEQUENCE_LENGTH
+        )
+        
+        print(f"Recent data sequence shape: X={X.shape}, y={y.shape}")
+        
+        # Check if we have enough sequences
+        if len(X) < 20:
+            print(f"❌ Insufficient sequences for retraining: {len(X)} < 20 minimum required")
+            return {
+                'success': False,
+                'error': f'Insufficient sequences: {len(X)} < 20 minimum required',
+                'data_points': len(X)
+            }
+        
+        # Create train/validation split
+        train_size = int(len(X) * (1 - self.config.VALIDATION_SPLIT))
+        X_train, X_val = X[:train_size], X[train_size:]
+        y_train, y_val = y[:train_size], y[train_size:]
+        
+        # Create data loaders
+        train_dataset = BitcoinDataset(X_train, y_train)
+        val_dataset = BitcoinDataset(X_val, y_val)
+        
+        train_loader = DataLoader(
+            train_dataset, 
+            batch_size=self.config.BATCH_SIZE, 
+            shuffle=True
+        )
+        val_loader = DataLoader(
+            val_dataset, 
+            batch_size=self.config.BATCH_SIZE, 
+            shuffle=False
+        )
+        
+        # Initialize or load existing model
+        if self.model is None:
+            self.model = init_model(self.config).to(self.device)
+            print("🆕 Initialized new model")
+        else:
+            if preserve_weights:
+                print("🔄 Preserving existing model weights as initialization")
+            else:
+                print("🔄 Reinitializing model weights")
+                self.model = init_model(self.config).to(self.device)
+        
+        # Initialize optimizer and criterion
+        optimizer = torch.optim.AdamW(
+            self.model.parameters(), 
+            lr=self.config.LEARNING_RATE * 0.5,  # Lower learning rate for retraining
+            weight_decay=1e-5
+        )
+        
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min', factor=0.5, patience=3  # Shorter patience for retraining
+        )
+        
+        criterion = VolatilityLoss()
+        
+        # Retraining loop with fewer epochs
+        retrain_epochs = min(self.config.NUM_EPOCHS // 2, 20)  # Use fewer epochs for retraining
+        
+        training_history = {
+            'train_losses': [],
+            'val_losses': [],
+            'train_metrics': [],
+            'val_metrics': []
+        }
+        
+        best_val_loss = float('inf')
+        patience_counter = 0
+        
+        print(f"🔄 Starting retraining for {retrain_epochs} epochs...")
+        
+        for epoch in range(retrain_epochs):
+            # Train
+            train_metrics = self.train_epoch(self.model, train_loader, optimizer, criterion)
+            
+            # Validate
+            val_metrics = self.validate_epoch(self.model, val_loader, criterion)
+            
+            # Update learning rate
+            scheduler.step(val_metrics['total_loss'])
+            
+            # Store metrics
+            training_history['train_losses'].append(train_metrics['total_loss'])
+            training_history['val_losses'].append(val_metrics['total_loss'])
+            training_history['train_metrics'].append(train_metrics)
+            training_history['val_metrics'].append(val_metrics)
+            
+            # Print progress
+            if epoch % 5 == 0 or epoch == retrain_epochs - 1:
+                print(f"Retrain Epoch {epoch}/{retrain_epochs}")
+                print(f"  Train Loss: {train_metrics['total_loss']:.6f}")
+                print(f"  Val Loss: {val_metrics['total_loss']:.6f}")
+                print(f"  Val R² - Vol: {val_metrics['r2_vol']:.4f}, "
+                      f"Skew: {val_metrics['r2_skew']:.4f}, "
+                      f"Kurt: {val_metrics['r2_kurt']:.4f}")
+            
+            # Early stopping and checkpointing
+            if val_metrics['total_loss'] < best_val_loss:
+                best_val_loss = val_metrics['total_loss']
+                patience_counter = 0
+                
+                # Save retrained model
+                self.save_model(epoch, train_metrics, val_metrics, feature_cols, target_cols, 
+                              suffix=f"_retrained_{days_back}days")
+            else:
+                patience_counter += 1
+                
+            if patience_counter >= 5:  # Shorter patience for retraining
+                print(f"Early stopping triggered after epoch {epoch}")
+                break
+        
+        # Save retraining history
+        retrain_history_path = os.path.join(self.config.RESULTS_PATH, 
+                                           f'retraining_history_{days_back}days.json')
+        with open(retrain_history_path, 'w') as f:
+            json.dump(training_history, f, indent=2)
+        
+        print(f"✅ Retraining completed!")
+        print(f"📁 Retrained model saved with suffix '_retrained_{days_back}days'")
+        print(f"📊 Retraining history saved to {retrain_history_path}")
+        
+        return {
+            'success': True,
+            'retrain_epochs': retrain_epochs,
+            'final_train_loss': training_history['train_losses'][-1],
+            'final_val_loss': training_history['val_losses'][-1],
+            'best_val_loss': best_val_loss,
+            'data_points_used': len(recent_df),
+            'days_back': days_back,
+            'model_suffix': f"_retrained_{days_back}days"
+        }
 
 
 def main():
