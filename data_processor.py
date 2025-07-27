@@ -3,27 +3,39 @@ import numpy as np
 from typing import Tuple, Optional
 from datetime import datetime, timedelta
 import warnings
+from config import Config
 warnings.filterwarnings('ignore')
 
-class BitcoinDataProcessor:
+class CryptoDataProcessor:
     """
-    Handles loading and preprocessing of Bitcoin price data for model training.
+    Handles loading and preprocessing of cryptocurrency price data for model training.
+    Supports multiple cryptocurrencies: BTC, ETH, XAU, SOL
     """
     
-    def __init__(self, csv_path: str):
+    def __init__(self, csv_path: str, crypto_symbol: str = 'BTC'):
         """
-        Initialize with path to CSV file containing Bitcoin price data.
+        Initialize with path to CSV file containing cryptocurrency price data.
         Expected columns: timestamp, open, close, high, low
+        
+        Args:
+            csv_path: Path to CSV file
+            crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
         """
+        # Validate crypto symbol
+        if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+            raise ValueError(f"Unsupported crypto symbol: {crypto_symbol}. Supported: {list(Config.SUPPORTED_CRYPTOS.keys())}")
+        
         self.csv_path = csv_path
+        self.crypto_symbol = crypto_symbol
+        self.crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
         self.data = None
         self.processed_data = None
         
     def load_data(self) -> pd.DataFrame:
-        """Load Bitcoin price data from CSV file."""
+        """Load cryptocurrency price data from CSV file."""
         try:
             self.data = pd.read_csv(self.csv_path)
-            print(f"Loaded {len(self.data)} records from {self.csv_path}")
+            print(f"Loaded {len(self.data)} records for {self.crypto_config['name']} ({self.crypto_symbol}) from {self.csv_path}")
             
             # Validate required columns
             required_cols = ['timestamp', 'open', 'close', 'high', 'low']
@@ -38,7 +50,7 @@ class BitcoinDataProcessor:
             return self.data
             
         except Exception as e:
-            raise Exception(f"Error loading data: {str(e)}")
+            raise Exception(f"Error loading {self.crypto_symbol} data: {str(e)}")
     
     def calculate_returns(self) -> pd.DataFrame:
         """Calculate price returns and basic statistics."""

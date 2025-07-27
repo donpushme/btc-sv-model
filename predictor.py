@@ -9,37 +9,45 @@ import pickle
 from config import Config
 from model import VolatilityLSTM
 from feature_engineering import FeatureEngineer
-from data_processor import BitcoinDataProcessor
+from data_processor import CryptoDataProcessor
 
 class RealTimeVolatilityPredictor:
     """
-    Real-time predictor for Bitcoin volatility, skewness, and kurtosis.
+    Real-time predictor for cryptocurrency volatility, skewness, and kurtosis.
+    Supports multiple cryptocurrencies: BTC, ETH, XAU, SOL
     """
     
-    def __init__(self, model_path: str = None):
+    def __init__(self, crypto_symbol: str = 'BTC', model_path: str = None):
         """
-        Initialize predictor with trained model.
+        Initialize predictor with trained model for a specific cryptocurrency.
         
         Args:
+            crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
             model_path: Path to saved model checkpoint
         """
+        # Validate crypto symbol
+        if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+            raise ValueError(f"Unsupported crypto symbol: {crypto_symbol}. Supported: {list(Config.SUPPORTED_CRYPTOS.keys())}")
+        
+        self.crypto_symbol = crypto_symbol
+        self.crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
         self.config = Config()
         self.device = self.config.DEVICE
         self.model = None
         self.feature_engineer = FeatureEngineer()
         self.feature_cols = None
         self.target_cols = None
-        self.processor = BitcoinDataProcessor('')
+        self.processor = CryptoDataProcessor('', self.crypto_symbol)
         
         if model_path:
             self.load_model(model_path)
         else:
-            # Try to load default model
-            default_path = os.path.join(self.config.MODEL_SAVE_PATH, 'best_model.pth')
+            # Try to load default model for this crypto
+            default_path = os.path.join(self.config.MODEL_SAVE_PATH, f'{self.crypto_symbol}_best_model.pth')
             if os.path.exists(default_path):
                 self.load_model(default_path)
             else:
-                print("No model found. Please provide model_path or train a model first.")
+                print(f"No model found for {self.crypto_config['name']} ({crypto_symbol}). Please provide model_path or train a model first.")
     
     def load_model(self, model_path: str):
         """
@@ -78,7 +86,7 @@ class RealTimeVolatilityPredictor:
             self.config.SEQUENCE_LENGTH = model_config['SEQUENCE_LENGTH']
             
             print(f"Model loaded successfully from {model_path}")
-            print(f"Model trained on {len(self.feature_cols)} features")
+            print(f"Model trained on {len(self.feature_cols)} features for {self.crypto_config['name']} ({self.crypto_symbol})")
             print(f"Validation metrics from training:")
             val_metrics = checkpoint.get('val_metrics', {})
             for key, value in val_metrics.items():
@@ -89,30 +97,30 @@ class RealTimeVolatilityPredictor:
     
     def load_latest_model(self) -> None:
         """
-        Load the most recent trained model automatically.
+        Load the most recent trained model automatically for this cryptocurrency.
         """
         if not os.path.exists(self.config.MODEL_SAVE_PATH):
             raise ValueError(f"Model directory not found: {self.config.MODEL_SAVE_PATH}")
         
-        # Find all model files
+        # Find all model files for this crypto
         model_files = [f for f in os.listdir(self.config.MODEL_SAVE_PATH) 
-                      if f.startswith('model_') and f.endswith('.pth')]
+                      if f.startswith(f'{self.crypto_symbol}_model_') and f.endswith('.pth')]
         
         if not model_files:
-            raise ValueError("No trained models found. Please train a model first.")
+            raise ValueError(f"No trained models found for {self.crypto_config['name']} ({self.crypto_symbol}). Please train a model first.")
         
         # Sort by timestamp (newest first)
         model_files.sort(reverse=True)
         latest_model_file = model_files[0]
         
         # Extract model version from filename
-        model_version = latest_model_file.replace('model_', '').replace('.pth', '')
+        model_version = latest_model_file.replace(f'{self.crypto_symbol}_model_', '').replace('.pth', '')
         
         # Load the latest model
         model_path = os.path.join(self.config.MODEL_SAVE_PATH, latest_model_file)
         self.load_model(model_path)
         
-        print(f"✅ Loaded latest model: {model_version}")
+        print(f"✅ Loaded latest model for {self.crypto_config['name']} ({self.crypto_symbol}): {model_version}")
     
     def preprocess_input_data(self, price_data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -494,6 +502,7 @@ class RealTimeVolatilityPredictor:
             return {'error': 'No model loaded'}
         
         return {
+            'crypto_symbol': self.crypto_symbol,
             'model_type': 'VolatilityLSTM',
             'input_size': self.config.INPUT_SIZE,
             'sequence_length': self.config.SEQUENCE_LENGTH,

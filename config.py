@@ -6,6 +6,37 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
+    # Multi-crypto support
+    SUPPORTED_CRYPTOS = {
+        'BTC': {
+            'name': 'Bitcoin',
+            'pyth_symbol': 'Crypto.BTC/USD',
+            'db_table': 'btc',
+            'data_file': 'bitcoin_5min.csv'
+        },
+        'ETH': {
+            'name': 'Ethereum', 
+            'pyth_symbol': 'Crypto.ETH/USD',
+            'db_table': 'eth',
+            'data_file': 'ethereum_5min.csv'
+        },
+        'XAU': {
+            'name': 'Gold',
+            'pyth_symbol': 'Metal.XAU/USD',
+            'db_table': 'xau',
+            'data_file': 'xau_5min.csv'
+        },
+        'SOL': {
+            'name': 'Solana',
+            'pyth_symbol': 'Crypto.SOL/USD', 
+            'db_table': 'sol',
+            'data_file': 'solana_5min.csv'
+        }
+    }
+    
+    # Default crypto for backward compatibility
+    DEFAULT_CRYPTO = 'BTC'
+    
     # Data parameters
     SEQUENCE_LENGTH = 144  # 12 hours of 5-minute intervals for context
     PREDICTION_HORIZON = 288  # 24 hours of 5-minute intervals to predict
@@ -54,6 +85,12 @@ class Config:
     MIN_NEW_DATA_POINTS = int(os.getenv('MIN_NEW_DATA_POINTS', '288'))
     PERFORMANCE_THRESHOLD = float(os.getenv('PERFORMANCE_THRESHOLD', '0.05'))
     MAX_TRAINING_DATA_HOURS = int(os.getenv('MAX_TRAINING_DATA_HOURS', '720'))
+    
+    # Retraining settings for limited data
+    RETRAIN_WITH_LIMITED_DATA = os.getenv('RETRAIN_WITH_LIMITED_DATA', 'true').lower() == 'true'
+    RETRAIN_MIN_DATA_POINTS = int(os.getenv('RETRAIN_MIN_DATA_POINTS', '50'))
+    RETRAIN_SMALL_WINDOWS = [3, 6, 12, 24]  # Smaller windows for limited data
+    RETRAIN_NORMAL_WINDOWS = [6, 12, 24, 48]  # Normal windows for sufficient data
     
     # Data retention settings (read from environment)
     PREDICTION_RETENTION_DAYS = int(os.getenv('PREDICTION_RETENTION_DAYS', '90'))

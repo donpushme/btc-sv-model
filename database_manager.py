@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-MongoDB Database Manager for Bitcoin Volatility Prediction System
-Handles storage of predictions, training data, and model metadata.
+MongoDB Database Manager for Multi-Crypto Volatility Prediction System
+Handles storage of predictions, training data, and model metadata for multiple cryptocurrencies.
 """
 
 import os
@@ -16,21 +16,30 @@ from pymongo import MongoClient, ASCENDING, DESCENDING
 from bson import ObjectId
 import warnings
 import dotenv
+from config import Config
 dotenv.load_dotenv()
 
 class DatabaseManager:
     """
-    Manages MongoDB operations for the Bitcoin volatility prediction system.
+    Manages MongoDB operations for the multi-crypto volatility prediction system.
     """
     
-    def __init__(self, connection_string: str = None, database_name: str = "synth_prediction"):
+    def __init__(self, crypto_symbol: str = 'BTC', connection_string: str = None, database_name: str = "synth_prediction"):
         """
-        Initialize database connection.
+        Initialize database connection for a specific cryptocurrency.
         
         Args:
+            crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
             connection_string: MongoDB connection string
             database_name: Name of the database to use
         """
+        # Validate crypto symbol
+        if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+            raise ValueError(f"Unsupported crypto symbol: {crypto_symbol}. Supported: {list(Config.SUPPORTED_CRYPTOS.keys())}")
+        
+        self.crypto_symbol = crypto_symbol
+        self.crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
+        
         # Default connection string for local MongoDB
         if connection_string is None:
             connection_string = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
@@ -41,7 +50,7 @@ class DatabaseManager:
             
             # Test connection
             self.client.admin.command('ping')
-            print(f"✅ Connected to MongoDB database: {database_name}")
+            print(f"✅ Connected to MongoDB database: {database_name} for {self.crypto_config['name']} ({crypto_symbol})")
             
             # Initialize collections
             self._init_collections()
@@ -52,9 +61,9 @@ class DatabaseManager:
             raise
     
     def _init_collections(self):
-        """Initialize collections and create indexes."""
-        # Collection names
-        self.predictions_collection = self.db.btc
+        """Initialize collections and create indexes for the specific cryptocurrency."""
+        # Collection names - crypto-specific for predictions, shared for others
+        self.predictions_collection = self.db[self.crypto_config['db_table']]
         self.training_data_collection = self.db.training_data
         self.models_collection = self.db.models
         self.performance_collection = self.db.performance
@@ -64,24 +73,28 @@ class DatabaseManager:
             # Predictions indexes
             self.predictions_collection.create_index([
                 ("timestamp", DESCENDING),
-                ("prediction_timestamp", DESCENDING)
+                ("prediction_timestamp", DESCENDING),
+                ("crypto_symbol", ASCENDING)
             ])
             
             # Training data indexes
             self.training_data_collection.create_index([
-                ("timestamp", DESCENDING)
+                ("timestamp", DESCENDING),
+                ("crypto_symbol", ASCENDING)
             ])
             
             # Models indexes
             self.models_collection.create_index([
                 ("created_at", DESCENDING),
-                ("model_version", DESCENDING)
+                ("model_version", DESCENDING),
+                ("crypto_symbol", ASCENDING)
             ])
             
             # Performance indexes
             self.performance_collection.create_index([
                 ("timestamp", DESCENDING),
-                ("model_version", DESCENDING)
+                ("model_version", DESCENDING),
+                ("crypto_symbol", ASCENDING)
             ])
             
         except Exception as e:
@@ -117,7 +130,8 @@ class DatabaseManager:
                 "confidence_interval_upper": float(prediction['confidence_interval_upper']),
                 "market_regime": prediction['market_regime'],
                 "risk_assessment": prediction['risk_assessment'],
-                "prediction_period": prediction['prediction_period']
+                "prediction_period": prediction['prediction_period'],
+                "crypto_symbol": self.crypto_symbol
             }
             
             # Insert document
@@ -155,7 +169,8 @@ class DatabaseManager:
                 "prediction_horizon_hours": int(batch_record.get('prediction_horizon_hours', 24)),
                 "source": batch_record.get('source', 'unknown'),
                 "summary_stats": batch_record['summary_stats'],
-                "predictions": batch_record['predictions']  # Array of all 288 predictions
+                "predictions": batch_record['predictions'],  # Array of all 288 predictions
+                "crypto_symbol": self.crypto_symbol
             }
             
             # Insert document
@@ -192,7 +207,8 @@ class DatabaseManager:
                     "start": pd.to_datetime(price_data['timestamp'].min()),
                     "end": pd.to_datetime(price_data['timestamp'].max())
                 },
-                "data": records
+                "data": records,
+                "crypto_symbol": self.crypto_symbol
             }
             
             # Insert document
@@ -230,7 +246,8 @@ class DatabaseManager:
                 "model_path": model_path,
                 "config": config,
                 "training_metrics": training_metrics,
-                "status": "active"
+                "status": "active",
+                "crypto_symbol": self.crypto_symbol
             }
             
             # Mark previous models as inactive
@@ -331,13 +348,35 @@ class DatabaseManager:
             
             if all_data:
                 df = pd.DataFrame(all_data)
+                
+                # Ensure required columns exist
+                required_cols = ['timestamp', 'open', 'close', 'high', 'low']
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                
+                if missing_cols:
+                    print(f"❌ Missing required columns in training data: {missing_cols}")
+                    print(f"Available columns: {list(df.columns)}")
+                    return pd.DataFrame()
+                
                 # Convert timestamp to datetime
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
+                
                 # Remove duplicates and sort
                 df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp')
                 
+                # Remove any rows with invalid price data
+                initial_count = len(df)
+                df = df.dropna(subset=['open', 'close', 'high', 'low'])
+                df = df[(df['open'] > 0) & (df['close'] > 0) & (df['high'] > 0) & (df['low'] > 0)]
+                final_count = len(df)
+                
+                if final_count < initial_count:
+                    print(f"⚠️ Removed {initial_count - final_count} rows with invalid price data")
+                
                 print(f"📊 Retrieved {len(df)} training records (from {len(all_data)} total records)")
                 print(f"📊 Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
+                print(f"📊 Columns: {list(df.columns)}")
+                
                 return df
             else:
                 print(f"📊 No training data found in database")
@@ -362,7 +401,8 @@ class DatabaseManager:
             doc = {
                 "model_version": model_version,
                 "timestamp": datetime.utcnow(),
-                "metrics": metrics
+                "metrics": metrics,
+                "crypto_symbol": self.crypto_symbol
             }
             
             result = self.performance_collection.insert_one(doc)

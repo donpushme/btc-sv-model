@@ -7,12 +7,12 @@ from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
 
-def validate_bitcoin_data(df: pd.DataFrame) -> Dict[str, any]:
+def validate_crypto_data(df: pd.DataFrame) -> Dict[str, any]:
     """
-    Validate Bitcoin price data for completeness and quality.
+    Validate cryptocurrency price data for completeness and quality.
     
     Args:
-        df: DataFrame with Bitcoin price data
+        df: DataFrame with cryptocurrency price data
         
     Returns:
         Dictionary with validation results
@@ -820,7 +820,7 @@ def load_and_validate_data(csv_path: str) -> pd.DataFrame:
     """
     try:
         df = pd.read_csv(csv_path)
-        validation_results = validate_bitcoin_data(df)
+        validation_results = validate_crypto_data(df)
         
         if not validation_results['is_valid']:
             raise ValueError(f"Data validation failed: {validation_results['errors']}")

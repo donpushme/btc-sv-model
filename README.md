@@ -1,9 +1,18 @@
-# Bitcoin Volatility Prediction for Monte Carlo Simulation
+# Multi-Crypto Volatility Prediction for Monte Carlo Simulation
 
-A comprehensive AI-powered system for predicting Bitcoin volatility, skewness, and kurtosis using deep learning techniques. This project is specifically designed for Monte Carlo simulations with real-time predictions that capture the cyclical nature of Bitcoin trading patterns.
+A comprehensive AI-powered system for predicting cryptocurrency volatility, skewness, and kurtosis using deep learning techniques. This project is specifically designed for Monte Carlo simulations with real-time predictions that capture the cyclical nature of cryptocurrency trading patterns.
+
+**Supported Cryptocurrencies:**
+- **Bitcoin (BTC)** - Crypto.BTC/USD
+- **Ethereum (ETH)** - Crypto.ETH/USD  
+- **Gold (XAU)** - Metal.XAU/USD
+- **Solana (SOL)** - Crypto.SOL/USD
+
+Each cryptocurrency has its own dedicated model, database table, and real-time prediction pipeline while sharing the same unified codebase.
 
 ## 🚀 Features
 
+- **Multi-Crypto Support** with separate models for BTC, ETH, XAU, SOL
 - **LSTM-based Neural Network** with attention mechanism for time series prediction
 - **Real-time Volatility Prediction** with 24-hour horizon and 5-minute intervals
 - **Monte Carlo Simulation** capabilities using predicted statistical moments
@@ -14,10 +23,11 @@ A comprehensive AI-powered system for predicting Bitcoin volatility, skewness, a
 - **Continuous Learning** with automatic model retraining on new data
 - **Production-Ready Architecture** with graceful shutdown and error handling
 - **Comprehensive Analytics** and performance monitoring dashboard
+- **Multi-Crypto Orchestrator** for running all cryptocurrencies simultaneously
 
 ## 📊 What It Predicts
 
-The model predicts three key statistical moments for Bitcoin price changes:
+The model predicts three key statistical moments for cryptocurrency price changes:
 
 1. **Volatility (σ)** - Price movement intensity
 2. **Skewness** - Asymmetry in returns distribution
@@ -28,6 +38,7 @@ These predictions enable realistic Monte Carlo simulations that capture:
 - Lower volatility during Asian night hours
 - Weekend effects and holiday patterns
 - Market stress periods and regime changes
+- Cryptocurrency-specific volatility patterns
 
 ## 🛠️ Installation
 
@@ -189,11 +200,11 @@ This will:
 from predictor import RealTimeVolatilityPredictor
 import pandas as pd
 
-# Load your latest Bitcoin data
-data = pd.read_csv('data/bitcoin_price_data.csv')
+# Load your latest cryptocurrency data
+data = pd.read_csv('data/btc_price_data.csv')  # or eth_price_data.csv, etc.
 
-# Initialize predictor
-predictor = RealTimeVolatilityPredictor()
+# Initialize predictor for specific cryptocurrency
+predictor = RealTimeVolatilityPredictor(crypto_symbol='BTC')  # or 'ETH', 'XAU', 'SOL'
 
 # Make prediction
 prediction = predictor.predict_next_period(data)
@@ -336,14 +347,14 @@ Each 5-minute cycle saves **ONE record** containing:
 ```python
 from continuous_predictor import ContinuousBitcoinPredictor
 
-# Initialize continuous predictor
-predictor = ContinuousBitcoinPredictor(symbol="Crypto.BTC/USD")
+# Initialize continuous predictor for specific cryptocurrency
+predictor = ContinuousCryptoPredictor(crypto_symbol="BTC")  # or 'ETH', 'XAU', 'SOL'
 
 # Start continuous monitoring (runs every 5 minutes with 288 predictions each cycle)
 predictor.start_continuous_prediction(interval_minutes=5)
 
 # The system will:
-# - Fetch real-time Bitcoin data from Pyth Network API
+# - Fetch real-time cryptocurrency data from Pyth Network API
 # - Generate 288 volatility predictions every 5 minutes
 # - Save all predictions to database with batch tracking
 # - Apply realistic volatility patterns based on trading hours
@@ -370,20 +381,23 @@ class Config:
     PREDICTION_HORIZON = 288  # 24 hours output
 ```
 
-## 🔄 Real-time Usage
+## 🔄 Multi-Crypto Usage
 
-For real-time predictions, integrate the predictor into your trading system:
+### Individual Cryptocurrency Prediction
+
+For real-time predictions on specific cryptocurrencies:
 
 ```python
 import schedule
 import time
 from predictor import RealTimeVolatilityPredictor
 
-predictor = RealTimeVolatilityPredictor()
+# Initialize predictor for specific cryptocurrency
+predictor = RealTimeVolatilityPredictor(crypto_symbol='BTC')  # or 'ETH', 'XAU', 'SOL'
 
 def make_hourly_prediction():
-    # Fetch latest Bitcoin data
-    data = get_latest_bitcoin_data()  # Your data fetching function
+    # Fetch latest cryptocurrency data
+    data = get_latest_crypto_data('BTC')  # Your data fetching function
     
     # Make prediction
     prediction = predictor.predict_next_period(data)
@@ -398,6 +412,52 @@ while True:
     schedule.run_pending()
     time.sleep(60)
 ```
+
+### Multi-Crypto Orchestrator
+
+Run predictions for all cryptocurrencies simultaneously:
+
+```python
+from multi_crypto_orchestrator import MultiCryptoOrchestrator
+
+# Initialize orchestrator for all cryptocurrencies
+orchestrator = MultiCryptoOrchestrator()  # Runs BTC, ETH, XAU, SOL
+
+# Or specify specific cryptocurrencies
+orchestrator = MultiCryptoOrchestrator(crypto_symbols=['BTC', 'ETH'])
+
+# Start multi-crypto prediction
+orchestrator.start()
+
+# Get status of all predictors
+status = orchestrator.get_status()
+print(f"Active predictors: {status['predictors']}")
+```
+
+### Training Multiple Models
+
+Train models for all cryptocurrencies:
+
+```bash
+# Train all available cryptocurrencies
+python train_all_cryptos.py
+
+# Train specific cryptocurrencies
+python train_all_cryptos.py BTC ETH
+
+# Train individual cryptocurrency
+python example_usage.py BTC
+```
+
+### Database Structure
+
+Each cryptocurrency has its own database table:
+
+- **BTC predictions**: `btc` collection
+- **ETH predictions**: `eth` collection  
+- **XAU predictions**: `xau` collection
+- **SOL predictions**: `sol` collection
+- **Shared collections**: `training_data`, `models`, `performance`
 
 ## 📊 Model Performance
 
@@ -605,8 +665,8 @@ requirements.txt                     # Python packages
 
 5. **Data validation errors**
    ```python
-   from utils import validate_bitcoin_data
-   validation = validate_bitcoin_data(your_data)
+   from utils import validate_crypto_data
+validation = validate_crypto_data(your_data)
    print(validation['errors'])
    ```
 

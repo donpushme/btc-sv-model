@@ -216,9 +216,9 @@ class FeatureEngineer:
         return targets_original
 
 
-class BitcoinDataset(Dataset):
+class CryptoDataset(Dataset):
     """
-    PyTorch Dataset for Bitcoin time series data.
+    PyTorch Dataset for cryptocurrency time series data.
     """
     
     def __init__(self, X: np.ndarray, y: np.ndarray):

@@ -16,16 +16,19 @@ import pickle
 
 from config import Config
 from model import VolatilityLSTM, VolatilityLoss, init_model
-from feature_engineering import FeatureEngineer, BitcoinDataset, create_train_val_split
-from data_processor import BitcoinDataProcessor
+from feature_engineering import FeatureEngineer, CryptoDataset, create_train_val_split
+from data_processor import CryptoDataProcessor
 
-class BitcoinVolatilityTrainer:
+class CryptoVolatilityTrainer:
     """
-    Training pipeline for Bitcoin volatility prediction model.
+    Training pipeline for cryptocurrency volatility prediction model.
+    Supports multiple cryptocurrencies: BTC, ETH, XAU, SOL
     """
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, crypto_symbol: str = 'BTC'):
         self.config = config
+        self.crypto_symbol = crypto_symbol
+        self.crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
         self.device = config.DEVICE
         self.model = None
         self.feature_engineer = FeatureEngineer()
@@ -39,15 +42,16 @@ class BitcoinVolatilityTrainer:
         os.makedirs(config.RESULTS_PATH, exist_ok=True)
         
         print(f"Using device: {self.device}")
+        print(f"Training model for {self.crypto_config['name']} ({crypto_symbol})")
     
     def prepare_data(self, csv_path: str) -> Tuple[DataLoader, DataLoader, List[str], List[str]]:
         """
         Prepare training and validation data loaders.
         """
-        print("Loading and preprocessing data...")
+        print(f"Loading and preprocessing data for {self.crypto_config['name']}...")
         
         # Load and preprocess data
-        processor = BitcoinDataProcessor(csv_path)
+        processor = CryptoDataProcessor(csv_path, self.crypto_symbol)
         df = processor.preprocess_data(
             return_windows=self.config.RETURN_WINDOWS,
             prediction_horizon=self.config.PREDICTION_HORIZON
@@ -95,8 +99,8 @@ class BitcoinVolatilityTrainer:
         print(f"Validation: X={X_val.shape}, y={y_val.shape}")
         
         # Create datasets and data loaders
-        train_dataset = BitcoinDataset(X_train, y_train)
-        val_dataset = BitcoinDataset(X_val, y_val)
+        train_dataset = CryptoDataset(X_train, y_train)
+        val_dataset = CryptoDataset(X_val, y_val)
         
         train_loader = DataLoader(
             train_dataset, 
@@ -303,10 +307,10 @@ class BitcoinVolatilityTrainer:
         
         # Generate timestamp for model version
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_version = f"{timestamp}{suffix}"
+        model_version = f"{self.crypto_symbol}_{timestamp}{suffix}"
         
         # Save model state
-        model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"model_{model_version}.pth")
+        model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_model_{timestamp}{suffix}.pth")
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'config': self.config,
@@ -315,13 +319,14 @@ class BitcoinVolatilityTrainer:
             'epoch': epoch,
             'train_metrics': train_metrics,
             'val_metrics': val_metrics,
-            'model_version': model_version
+            'model_version': model_version,
+            'crypto_symbol': self.crypto_symbol
         }, model_path)
         
         print(f"Model saved to {model_path}")
         
         # Save feature engineer state
-        feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"feature_engineer_{model_version}.pkl")
+        feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer_{timestamp}{suffix}.pkl")
         with open(feature_engineer_path, 'wb') as f:
             pickle.dump(self.feature_engineer, f)
         
@@ -330,6 +335,7 @@ class BitcoinVolatilityTrainer:
         # Save model metadata
         metadata = {
             'model_version': model_version,
+            'crypto_symbol': self.crypto_symbol,
             'timestamp': timestamp,
             'epoch': epoch,
             'feature_cols': feature_cols,
@@ -341,7 +347,7 @@ class BitcoinVolatilityTrainer:
             'feature_engineer_path': feature_engineer_path
         }
         
-        metadata_path = os.path.join(self.config.MODEL_SAVE_PATH, f"metadata_{model_version}.json")
+        metadata_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_metadata_{timestamp}{suffix}.json")
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         
@@ -435,15 +441,34 @@ class BitcoinVolatilityTrainer:
         print(f"🔄 Retraining with recent data (last {days_back} days)...")
         
         # Load the data
-        processor = BitcoinDataProcessor(csv_path)
+        processor = CryptoDataProcessor(csv_path, self.crypto_symbol)
         df = processor.load_data()
         
-        # Filter to recent data only
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        cutoff_date = df['timestamp'].max() - pd.Timedelta(days=days_back)
-        recent_df = df[df['timestamp'] >= cutoff_date].copy()
+        print(f"📊 Loaded {len(df)} data points from CSV")
+        print(f"📊 CSV columns: {list(df.columns)}")
+        print(f"📊 CSV sample:")
+        print(df.head())
         
-        print(f"📊 Using {len(recent_df):,} data points from {cutoff_date.strftime('%Y-%m-%d')} to {df['timestamp'].max().strftime('%Y-%m-%d')}")
+        # For retraining, we need more data to handle rolling windows properly
+        # Use more data if available, but prioritize recent data
+        if len(df) < 1000:
+            print(f"⚠️ Very limited data available ({len(df)} points). Using all data for retraining.")
+            recent_df = df.copy()
+        else:
+            # Filter to recent data only
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            cutoff_date = df['timestamp'].max() - pd.Timedelta(days=days_back)
+            recent_df = df[df['timestamp'] >= cutoff_date].copy()
+            
+            # If we don't have enough recent data, use more historical data
+            if len(recent_df) < 500:
+                print(f"⚠️ Limited recent data ({len(recent_df)} points). Using more historical data.")
+                # Use at least 500 data points or 60 days, whichever is more
+                min_data_points = max(500, len(df) // 2)
+                recent_df = df.tail(min_data_points).copy()
+        
+        print(f"📊 Using {len(recent_df):,} data points for retraining")
+        print(f"📊 Date range: {recent_df['timestamp'].min()} to {recent_df['timestamp'].max()}")
         
         # Check if we have enough data
         if len(recent_df) < 100:
@@ -458,16 +483,36 @@ class BitcoinVolatilityTrainer:
             print("⚠️  Warning: Very small dataset for retraining. Consider using more days_back.")
         
         # Preprocess the recent data
+        print(f"🔄 Starting preprocessing...")
+        
+        # Use smaller rolling windows if data is limited
+        if len(recent_df) < 1000:
+            print(f"⚠️ Limited data detected ({len(recent_df)} points). Using smaller rolling windows.")
+            return_windows = self.config.RETRAIN_SMALL_WINDOWS
+        else:
+            return_windows = self.config.RETRAIN_NORMAL_WINDOWS
+        
+        print(f"📊 Using rolling windows: {return_windows}")
+        
         recent_df = processor.preprocess_data(
-            return_windows=self.config.RETURN_WINDOWS,
+            return_windows=return_windows,
             prediction_horizon=self.config.PREDICTION_HORIZON
         )
         
+        print(f"📊 After preprocessing: {len(recent_df)} data points")
+        
         # Add additional features
+        print(f"🔄 Adding engineered features...")
         recent_df = self.feature_engineer.engineer_features(recent_df)
         
+        print(f"📊 After feature engineering: {len(recent_df)} data points")
+        
         # Remove any remaining NaN values
+        initial_rows = len(recent_df)
         recent_df = recent_df.dropna().reset_index(drop=True)
+        final_rows = len(recent_df)
+        
+        print(f"📊 After removing NaN values: {final_rows} data points (removed {initial_rows - final_rows})")
         print(f"Final recent dataset shape: {recent_df.shape}")
         
         # Check if we still have enough data after preprocessing
@@ -490,12 +535,15 @@ class BitcoinVolatilityTrainer:
         self.config.INPUT_SIZE = len(feature_cols)
         
         # Fit scalers on the recent data
+        print(f"🔄 Fitting scalers...")
         self.feature_engineer.fit_scalers(recent_df, feature_cols, target_cols)
         
         # Scale the data
+        print(f"🔄 Scaling data...")
         recent_df_scaled = self.feature_engineer.transform_data(recent_df, feature_cols, target_cols)
         
         # Prepare sequences
+        print(f"🔄 Preparing sequences...")
         X, y = self.feature_engineer.prepare_sequences(
             recent_df_scaled, feature_cols, target_cols, self.config.SEQUENCE_LENGTH
         )
@@ -517,8 +565,8 @@ class BitcoinVolatilityTrainer:
         y_train, y_val = y[:train_size], y[train_size:]
         
         # Create data loaders
-        train_dataset = BitcoinDataset(X_train, y_train)
-        val_dataset = BitcoinDataset(X_val, y_val)
+        train_dataset = CryptoDataset(X_train, y_train)
+        val_dataset = CryptoDataset(X_val, y_val)
         
         train_loader = DataLoader(
             train_dataset, 
@@ -634,26 +682,47 @@ class BitcoinVolatilityTrainer:
 
 def main():
     """
-    Main training function.
+    Main training function supporting multiple cryptocurrencies.
+    Usage: python trainer.py [crypto_symbol]
+    Example: python trainer.py BTC
+    Example: python trainer.py ETH
+    Example: python trainer.py XAU
+    Example: python trainer.py SOL
     """
-    config = Config()
-    trainer = BitcoinVolatilityTrainer(config)
+    import sys
     
-    # Replace with your CSV file path
-    csv_path = 'training_data/bitcoin_5min.csv'
+    # Get crypto symbol from command line argument, default to BTC
+    crypto_symbol = sys.argv[1].upper() if len(sys.argv) > 1 else 'BTC'
+    
+    # Validate crypto symbol
+    if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+        print(f"❌ Unsupported cryptocurrency: {crypto_symbol}")
+        print(f"Supported cryptocurrencies: {list(Config.SUPPORTED_CRYPTOS.keys())}")
+        return
+    
+    config = Config()
+    trainer = CryptoVolatilityTrainer(config, crypto_symbol)
+    
+    # Get crypto-specific data file path
+    crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
+    csv_path = f'training_data/{crypto_config["data_file"]}'
+    
+    print(f"🚀 Starting training for {crypto_config['name']} ({crypto_symbol})")
+    print(f"📁 Data file: {csv_path}")
     
     if not os.path.exists(csv_path):
-        print(f"Please place your Bitcoin price data CSV file at: {csv_path}")
+        print(f"❌ Data file not found: {csv_path}")
+        print(f"Please place your {crypto_config['name']} price data CSV file at: {csv_path}")
         print("Expected columns: timestamp, open, close, high, low")
         return
     
     try:
         training_history = trainer.train(csv_path)
-        print("Training completed successfully!")
-        print(f"Best validation loss: {min(training_history['val_losses']):.6f}")
+        print(f"✅ Training completed successfully for {crypto_config['name']}!")
+        print(f"📊 Best validation loss: {min(training_history['val_losses']):.6f}")
         
     except Exception as e:
-        print(f"Training failed with error: {str(e)}")
+        print(f"❌ Training failed with error: {str(e)}")
         raise
 
 

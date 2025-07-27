@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 """
-Continuous Bitcoin Volatility Predictor
+Continuous Multi-Crypto Volatility Predictor
 Runs every 5 minutes and generates 288 volatility predictions for the next 24 hours.
+Supports multiple cryptocurrencies: BTC, ETH, XAU, SOL
 Saves all predictions to MongoDB database.
-Uses Pyth Network API for real-time Bitcoin price data.
+Uses Pyth Network API for real-time cryptocurrency price data.
 """
 
 import os
@@ -22,34 +23,42 @@ from dotenv import load_dotenv
 
 from predictor import RealTimeVolatilityPredictor
 from database_manager import DatabaseManager
-from trainer import BitcoinVolatilityTrainer
+from trainer import CryptoVolatilityTrainer
 from config import Config
-from utils import format_prediction_output, validate_bitcoin_data
+from utils import format_prediction_output, validate_crypto_data
 
 # Load environment variables
 load_dotenv()
 
-class ContinuousBitcoinPredictor:
+class ContinuousCryptoPredictor:
     """
     Continuous predictor that runs every 5 minutes generating 288 predictions each time.
-    Uses Pyth Network API for real-time Bitcoin price data.
+    Supports multiple cryptocurrencies: BTC, ETH, XAU, SOL
+    Uses Pyth Network API for real-time cryptocurrency price data.
     Self-contained with integrated prediction and database functionality.
     """
     
-    def __init__(self, symbol: str = "Crypto.BTC/USD"):
+    def __init__(self, crypto_symbol: str = "BTC"):
         """
-        Initialize the continuous predictor.
+        Initialize the continuous predictor for a specific cryptocurrency.
         
         Args:
-            symbol: Bitcoin trading symbol for Pyth Network API
+            crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
         """
-        print("🚀 Initializing Continuous Bitcoin Volatility Predictor...")
+        # Validate crypto symbol
+        if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+            raise ValueError(f"Unsupported crypto symbol: {crypto_symbol}. Supported: {list(Config.SUPPORTED_CRYPTOS.keys())}")
         
-        self.symbol = symbol
+        self.crypto_symbol = crypto_symbol
+        self.crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
+        self.symbol = self.crypto_config['pyth_symbol']
+        
+        print(f"🚀 Initializing Continuous {self.crypto_config['name']} Volatility Predictor...")
+        
         self.api_base_url = "https://benchmarks.pyth.network/v1/shims/tradingview/history"
         
         # Initialize base predictor for volatility predictions
-        self.predictor = RealTimeVolatilityPredictor()
+        self.predictor = RealTimeVolatilityPredictor(crypto_symbol=self.crypto_symbol)
         
         # Database configuration
         self.enable_database = os.getenv('ENABLE_DATABASE', 'true').lower() == 'true'
@@ -59,8 +68,8 @@ class ContinuousBitcoinPredictor:
         self.db_manager = None
         if self.enable_database:
             try:
-                self.db_manager = DatabaseManager()
-                print("✅ Database connection established")
+                self.db_manager = DatabaseManager(crypto_symbol=self.crypto_symbol)
+                print(f"✅ Database connection established for {self.crypto_config['name']}")
             except Exception as e:
                 print(f"⚠️ Database connection failed: {str(e)}")
                 self.enable_database = False
@@ -87,8 +96,8 @@ class ContinuousBitcoinPredictor:
         if self.enable_online_learning:
             try:
                 config = Config()
-                self.trainer = BitcoinVolatilityTrainer(config)
-                print("✅ Training system initialized for continuous learning")
+                self.trainer = CryptoVolatilityTrainer(config, crypto_symbol=self.crypto_symbol)
+                print(f"✅ Training system initialized for {self.crypto_config['name']} continuous learning")
             except Exception as e:
                 print(f"⚠️ Training system initialization failed: {str(e)}")
                 self.enable_online_learning = False
@@ -97,7 +106,7 @@ class ContinuousBitcoinPredictor:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
-        print("✅ Continuous predictor initialized")
+        print(f"✅ Continuous predictor initialized for {self.crypto_config['name']} ({crypto_symbol})")
         print(f"📊 Symbol: {self.symbol}")
         print(f"🌐 API: Pyth Network")
         print(f"💾 Database: {'Enabled' if self.enable_database else 'Disabled'}")
@@ -105,9 +114,9 @@ class ContinuousBitcoinPredictor:
         print(f"🔧 Model Version: {self.current_model_version}")
         
         if self.enable_online_learning:
-            print("🔄 Independent background retraining: ✅ ENABLED")
+            print(f"🔄 Independent background retraining: ✅ ENABLED")
         else:
-            print("⏸️  Independent background retraining: ❌ DISABLED")
+            print(f"⏸️  Independent background retraining: ❌ DISABLED")
     
     def _get_model_version(self) -> str:
         """Get current model version."""
@@ -125,18 +134,18 @@ class ContinuousBitcoinPredictor:
         self.stop()
         sys.exit(0)
     
-    def fetch_bitcoin_data_from_api(self, hours_back: int = 120) -> pd.DataFrame:
+    def fetch_crypto_data_from_api(self, hours_back: int = 120) -> pd.DataFrame:
         """
-        Fetch Bitcoin price data from Pyth Network API.
+        Fetch cryptocurrency price data from Pyth Network API.
         
         Args:
             hours_back: How many hours of historical data to fetch
             
         Returns:
-            DataFrame with Bitcoin price data
+            DataFrame with cryptocurrency price data
         """
         try:
-            print(f"📡 Fetching Bitcoin data from Pyth Network API...")
+            print(f"📡 Fetching {self.crypto_config['name']} data from Pyth Network API...")
             
             # Calculate time range
             current_time = int(time.time())
@@ -198,18 +207,18 @@ class ContinuousBitcoinPredictor:
             print(f"❌ Data error from Pyth API: {str(e)}")
             raise
         except Exception as e:
-            print(f"❌ Unexpected error fetching Bitcoin data: {str(e)}")
+            print(f"❌ Unexpected error fetching {self.crypto_config['name']} data: {str(e)}")
             raise
     
-    def get_current_bitcoin_price(self) -> Dict[str, any]:
+    def get_current_crypto_price(self) -> Dict[str, any]:
         """
-        Get the current Bitcoin price from Pyth Network API.
+        Get the current cryptocurrency price from Pyth Network API.
         
         Returns:
             Dict with current price information
         """
         try:
-            print(f"💰 Getting current Bitcoin price...")
+            print(f"💰 Getting current {self.crypto_config['name']} price...")
             
             current_time = int(time.time())
             # Get just the latest data point
@@ -238,26 +247,26 @@ class ContinuousBitcoinPredictor:
                 'source': 'Pyth Network'
             }
             
-            print(f"📈 Current Bitcoin Price: ${result['price']:,.2f}")
+            print(f"📈 Current {self.crypto_config['name']} Price: ${result['price']:,.2f}")
             print(f"🕐 As of: {result['timestamp']}")
             
             return result
             
         except Exception as e:
-            print(f"❌ Failed to get current Bitcoin price: {str(e)}")
+            print(f"❌ Failed to get current {self.crypto_config['name']} price: {str(e)}")
             raise
 
     def fetch_realtime_data(self, hours_back: int = 120) -> pd.DataFrame:
         """
-        Fetch real-time Bitcoin data using Pyth Network API.
+        Fetch real-time cryptocurrency data using Pyth Network API.
         
         Args:
             hours_back: Hours of historical data to fetch
             
         Returns:
-            DataFrame with Bitcoin price data
+            DataFrame with cryptocurrency price data
         """
-        return self.fetch_bitcoin_data_from_api(hours_back)
+        return self.fetch_crypto_data_from_api(hours_back)
     
     def generate_288_predictions(self, price_data: pd.DataFrame) -> Dict:
         """
@@ -468,7 +477,7 @@ class ContinuousBitcoinPredictor:
         Save real-time price data to database for future training.
         
         Args:
-            price_data: Real-time Bitcoin price data
+            price_data: Real-time cryptocurrency price data
             
         Returns:
             bool: Success status
@@ -477,8 +486,9 @@ class ContinuousBitcoinPredictor:
             return False
             
         try:
-            # Save the latest data points for training
-            recent_data = price_data.tail(50)  # Save last 50 data points
+            # Save more data points for better retraining
+            # Save the last 200 data points instead of just 50
+            recent_data = price_data.tail(200)  # Save last 200 data points
             self.db_manager.save_training_data(
                 recent_data, 
                 data_source="realtime_continuous"
@@ -628,14 +638,23 @@ class ContinuousBitcoinPredictor:
                 print("❌ No training data available for retraining")
                 return False
             
-            if len(training_data) < self.min_new_data_points:
-                print(f"⚠️ Insufficient training data: {len(training_data)} < {self.min_new_data_points}")
-                print("💡 Consider reducing min_new_data_points or collecting more data")
-                return False
+            # Debug: Show data structure
+            print(f"📊 Training data columns: {list(training_data.columns)}")
+            print(f"📊 Training data sample:")
+            print(training_data.head())
+            print(f"📊 Training data info:")
+            print(training_data.info())
+            
+            # More flexible data requirements for retraining
+            min_data_points = max(100, self.min_new_data_points // 2)  # Lower threshold for retraining
+            
+            if len(training_data) < min_data_points:
+                print(f"⚠️ Limited training data: {len(training_data)} < {min_data_points}")
+                print("💡 Will attempt retraining with available data")
             
             # Additional check for minimum data requirements
-            if len(training_data) < 100:
-                print(f"⚠️ Very limited training data: {len(training_data)} < 100 minimum for retraining")
+            if len(training_data) < 50:
+                print(f"⚠️ Very limited training data: {len(training_data)} < 50 minimum for retraining")
                 print("💡 This might cause training issues. Consider collecting more data first.")
                 return False
             
@@ -653,9 +672,17 @@ class ContinuousBitcoinPredictor:
                     training_data.to_csv(temp_csv, index=False)
                 
                 print(f"💾 Saved training data to temporary file: {temp_csv}")
+                print(f"💾 File size: {temp_os.path.getsize(temp_csv)} bytes")
+                
+                # Use more flexible retraining parameters
+                # If we have limited data, use all available data instead of just 30 days
+                if len(training_data) < 1000:
+                    days_back = 60  # Use more historical data for small datasets
+                else:
+                    days_back = 30  # Use recent data for larger datasets
                 
                 # Perform retraining with recent data
-                training_results = self.trainer.retrain_with_current_data(temp_csv, days_back=30)
+                training_results = self.trainer.retrain_with_current_data(temp_csv, days_back=days_back)
                 success = training_results is not None and training_results.get('success', False)
                 
             finally:
@@ -671,7 +698,7 @@ class ContinuousBitcoinPredictor:
                 
                 # Reload the predictor with new model
                 try:
-                    self.predictor = RealTimeVolatilityPredictor()
+                    self.predictor = RealTimeVolatilityPredictor(crypto_symbol=self.crypto_symbol)
                     print(f"✅ Background retraining completed!")
                     print(f"   Old version: {old_version}")
                     print(f"   New version: {self.current_model_version}")
@@ -839,7 +866,7 @@ class ContinuousBitcoinPredictor:
         Args:
             interval_minutes: How often to make predictions (should be 5 for your use case)
         """
-        print(f"\n🚀 Starting Continuous Bitcoin Volatility Prediction")
+        print(f"\n🚀 Starting Continuous {self.crypto_config['name']} Volatility Prediction")
         print(f"⏰ Prediction interval: {interval_minutes} minutes")
         print(f"🔮 Predictions per cycle: 288 (next 24 hours)")
         print(f"💾 Database storage: {'Enabled' if self.enable_database else 'Disabled'}")
@@ -916,13 +943,30 @@ class ContinuousBitcoinPredictor:
 
 
 def main():
-    """Main function to run continuous prediction."""
-    print("🚀 Bitcoin Volatility - Continuous Prediction Mode")
+    """Main function to run continuous prediction supporting multiple cryptocurrencies."""
+    import sys
+    
+    # Get crypto symbol from command line argument, default to BTC
+    crypto_symbol = sys.argv[1].upper() if len(sys.argv) > 1 else 'BTC'
+    
+    # Validate crypto symbol
+    if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+        print(f"❌ Unsupported cryptocurrency: {crypto_symbol}")
+        print(f"Supported cryptocurrencies: {list(Config.SUPPORTED_CRYPTOS.keys())}")
+        print("Usage: python continuous_predictor.py [crypto_symbol]")
+        print("Example: python continuous_predictor.py BTC")
+        print("Example: python continuous_predictor.py ETH")
+        return
+    
+    crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
+    
+    print("🚀 Multi-Crypto Volatility - Continuous Prediction Mode")
+    print(f"🎯 Target: {crypto_config['name']} ({crypto_symbol})")
     print("=" * 50)
     
     try:
         # Initialize continuous predictor
-        predictor = ContinuousBitcoinPredictor(symbol="Crypto.BTC/USD")
+        predictor = ContinuousCryptoPredictor(crypto_symbol=crypto_symbol)
         
         # Start continuous prediction (every 5 minutes)
         predictor.start_continuous_prediction(interval_minutes=5)

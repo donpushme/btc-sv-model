@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Bitcoin Volatility Prediction - Complete Usage Example
+Multi-Crypto Volatility Prediction - Complete Usage Example
 
-This script demonstrates the complete workflow:
+This script demonstrates the complete workflow for multiple cryptocurrencies:
 1. Data preparation and validation
 2. Model training
 3. Real-time prediction
 4. Monte Carlo simulation
 5. Results visualization
+
+Supports: BTC, ETH, XAU, SOL
 
 Author: AI Assistant
 Date: 2024
@@ -22,11 +24,11 @@ import yfinance as yf
 
 # Import project modules
 from config import Config
-from data_processor import BitcoinDataProcessor
-from trainer import BitcoinVolatilityTrainer
+from data_processor import CryptoDataProcessor
+from trainer import CryptoVolatilityTrainer
 from predictor import RealTimeVolatilityPredictor
 from utils import (
-    validate_bitcoin_data, 
+    validate_crypto_data, 
     monte_carlo_simulation, 
     plot_monte_carlo_results,
     format_prediction_output,
@@ -34,42 +36,57 @@ from utils import (
     analyze_volatility_patterns
 )
 
-def download_sample_data(days: int = 60) -> str:
+def download_sample_data(crypto_symbol: str = 'BTC', days: int = 60) -> str:
     """
-    Download sample Bitcoin data using yfinance.
+    Download sample cryptocurrency data using yfinance.
     
     Args:
+        crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
         days: Number of days of historical data to download
         
     Returns:
         Path to the saved CSV file
     """
-    print("📥 Downloading sample Bitcoin data...")
+    # Map crypto symbols to yfinance symbols
+    yf_symbols = {
+        'BTC': 'BTC-USD',
+        'ETH': 'ETH-USD',
+        'XAU': 'GC=F',  # Gold futures
+        'SOL': 'SOL-USD'
+    }
+    
+    if crypto_symbol not in yf_symbols:
+        raise ValueError(f"Unsupported crypto symbol: {crypto_symbol}")
+    
+    yf_symbol = yf_symbols[crypto_symbol]
+    crypto_name = Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']
+    
+    print(f"📥 Downloading sample {crypto_name} data...")
     
     try:
-        # Download Bitcoin data
-        btc = yf.download(
-            "BTC-USD", 
+        # Download cryptocurrency data
+        data = yf.download(
+            yf_symbol, 
             interval="5m", 
             period=f"{days}d",
             progress=False
         )
         
-        if btc.empty:
+        if data.empty:
             raise ValueError("No data downloaded")
         
         # Reset index and prepare columns
-        btc.reset_index(inplace=True)
+        data.reset_index(inplace=True)
         
         # Handle different yfinance column structures
-        if len(btc.columns) == 7:
-            btc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
-        elif len(btc.columns) == 6:
-            btc.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        if len(data.columns) == 7:
+            data.columns = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+        elif len(data.columns) == 6:
+            data.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         else:
             # Use original column names and find the required ones
             expected_cols = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
-            available_cols = [col for col in expected_cols if col in btc.columns]
+            available_cols = [col for col in expected_cols if col in data.columns]
             
             # Create mapping for standardized names
             col_mapping = {
@@ -82,34 +99,34 @@ def download_sample_data(days: int = 60) -> str:
             }
             
             # Rename columns
-            btc = btc.rename(columns=col_mapping)
+            data = data.rename(columns=col_mapping)
             
             # Add timestamp column name if datetime index was reset
-            if 'Datetime' in btc.columns:
-                btc = btc.rename(columns={'Datetime': 'timestamp'})
-            elif btc.columns[0] not in ['timestamp', 'open', 'high', 'low', 'close']:
+            if 'Datetime' in data.columns:
+                data = data.rename(columns={'Datetime': 'timestamp'})
+            elif data.columns[0] not in ['timestamp', 'open', 'high', 'low', 'close']:
                 # First column is likely the timestamp
-                btc.columns = ['timestamp'] + list(btc.columns[1:])
+                data.columns = ['timestamp'] + list(data.columns[1:])
         
         # Select required columns (ensure they exist)
         required_cols = ['timestamp', 'open', 'close', 'high', 'low']
-        available_required = [col for col in required_cols if col in btc.columns]
+        available_required = [col for col in required_cols if col in data.columns]
         
         if len(available_required) < 5:
-            raise ValueError(f"Missing required columns. Available: {list(btc.columns)}, Required: {required_cols}")
+            raise ValueError(f"Missing required columns. Available: {list(data.columns)}, Required: {required_cols}")
         
-        btc = btc[required_cols].copy()
+        data = data[required_cols].copy()
         
         # Remove any NaN values
-        btc.dropna(inplace=True)
+        data.dropna(inplace=True)
         
         # Save to CSV
-        csv_path = 'data/bitcoin_price_data.csv'
+        csv_path = f'data/{crypto_symbol}_price_data.csv'
         os.makedirs('data', exist_ok=True)
-        btc.to_csv(csv_path, index=False)
+        data.to_csv(csv_path, index=False)
         
-        print(f"✅ Downloaded {len(btc)} records")
-        print(f"📊 Date range: {btc['timestamp'].min()} to {btc['timestamp'].max()}")
+        print(f"✅ Downloaded {len(data)} records")
+        print(f"📊 Date range: {data['timestamp'].min()} to {data['timestamp'].max()}")
         print(f"💾 Saved to: {csv_path}")
         
         return csv_path
@@ -119,21 +136,23 @@ def download_sample_data(days: int = 60) -> str:
         print("💡 Please ensure you have internet connection and yfinance is installed")
         return None
 
-def validate_data_quality(csv_path: str) -> bool:
+def validate_data_quality(csv_path: str, crypto_symbol: str = 'BTC') -> bool:
     """
-    Validate the quality of Bitcoin price data.
+    Validate the quality of cryptocurrency price data.
     
     Args:
         csv_path: Path to CSV file
+        crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
         
     Returns:
         True if data is valid, False otherwise
     """
-    print("\n🔍 Validating data quality...")
+    crypto_name = Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']
+    print(f"\n🔍 Validating {crypto_name} data quality...")
     
     try:
         df = pd.read_csv(csv_path)
-        validation_results = validate_bitcoin_data(df)
+        validation_results = validate_crypto_data(df)
         
         if validation_results['is_valid']:
             print("✅ Data validation passed!")
@@ -162,21 +181,23 @@ def validate_data_quality(csv_path: str) -> bool:
         print(f"❌ Error validating data: {str(e)}")
         return False
 
-def train_model(csv_path: str) -> bool:
+def train_model(csv_path: str, crypto_symbol: str = 'BTC') -> bool:
     """
     Train the volatility prediction model.
     
     Args:
         csv_path: Path to training data
+        crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
         
     Returns:
         True if training successful, False otherwise
     """
-    print("\n🚀 Starting model training...")
+    crypto_name = Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']
+    print(f"\n🚀 Starting {crypto_name} model training...")
     
     try:
         config = Config()
-        trainer = BitcoinVolatilityTrainer(config)
+        trainer = CryptoVolatilityTrainer(config, crypto_symbol)
         
         # Train the model
         training_history = trainer.train(csv_path)
@@ -192,21 +213,23 @@ def train_model(csv_path: str) -> bool:
         print(f"❌ Training failed: {str(e)}")
         return False
 
-def make_predictions(csv_path: str) -> dict:
+def make_predictions(csv_path: str, crypto_symbol: str = 'BTC') -> dict:
     """
     Make volatility predictions using the trained model.
     
     Args:
         csv_path: Path to data for prediction
+        crypto_symbol: Cryptocurrency symbol (BTC, ETH, XAU, SOL)
         
     Returns:
         Dictionary with prediction results
     """
-    print("\n🔮 Making volatility predictions...")
+    crypto_name = Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']
+    print(f"\n🔮 Making {crypto_name} volatility predictions...")
     
     try:
         # Load the predictor
-        predictor = RealTimeVolatilityPredictor()
+        predictor = RealTimeVolatilityPredictor(crypto_symbol=crypto_symbol)
         
         if predictor.model is None:
             print("❌ No trained model found. Please train the model first.")
@@ -330,25 +353,37 @@ def analyze_market_patterns(csv_path: str):
 
 def main():
     """
-    Main function demonstrating the complete workflow.
+    Main function demonstrating the complete workflow for multiple cryptocurrencies.
     """
-    print("🚀 Bitcoin Volatility Prediction - Complete Example")
+    print("🚀 Multi-Crypto Volatility Prediction - Complete Example")
     print("=" * 60)
     
     # Create project directories
     print("📁 Setting up project structure...")
     create_project_directories()
     
-    # Step 1: Download and validate data
-    csv_path = 'data/bitcoin_price_data.csv'
-    
-    if not os.path.exists(csv_path):
-        csv_path = download_sample_data(days=60)
-        if csv_path is None:
-            print("❌ Cannot proceed without data. Please provide Bitcoin price data.")
+    # Get crypto symbol from command line or use default
+    crypto_symbol = 'BTC'
+    if len(sys.argv) > 1:
+        crypto_symbol = sys.argv[1].upper()
+        if crypto_symbol not in Config.SUPPORTED_CRYPTOS:
+            print(f"❌ Unsupported crypto symbol: {crypto_symbol}")
+            print(f"Supported: {', '.join(Config.SUPPORTED_CRYPTOS.keys())}")
             return
     
-    if not validate_data_quality(csv_path):
+    crypto_name = Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']
+    print(f"📊 Running example for {crypto_name} ({crypto_symbol})")
+    
+    # Step 1: Download and validate data
+    csv_path = f'data/{crypto_symbol.lower()}_price_data.csv'
+    
+    if not os.path.exists(csv_path):
+        csv_path = download_sample_data(crypto_symbol=crypto_symbol, days=60)
+        if csv_path is None:
+            print(f"❌ Cannot proceed without data. Please provide {crypto_name} price data.")
+            return
+    
+    if not validate_data_quality(csv_path, crypto_symbol=crypto_symbol):
         print("❌ Data quality issues detected. Please fix data before proceeding.")
         return
     
@@ -356,16 +391,16 @@ def main():
     analyze_market_patterns(csv_path)
     
     # Step 2: Train the model (skip if model already exists)
-    model_path = 'models/best_model.pth'
+    model_path = f'models/{crypto_symbol}_best_model.pth'
     if not os.path.exists(model_path):
-        if not train_model(csv_path):
+        if not train_model(csv_path, crypto_symbol=crypto_symbol):
             print("❌ Cannot proceed without trained model.")
             return
     else:
         print(f"\n🎯 Using existing trained model: {model_path}")
     
     # Step 3: Make predictions
-    prediction = make_predictions(csv_path)
+    prediction = make_predictions(csv_path, crypto_symbol=crypto_symbol)
     if prediction is None:
         print("❌ Cannot proceed without predictions.")
         return
@@ -381,13 +416,14 @@ def main():
     print("📁 Check the following directories for results:")
     print("  - models/: Trained model files")
     print("  - results/: Training plots and simulation results")
-    print("  - data/: Bitcoin price data")
+    print("  - data/: Cryptocurrency price data")
     
     print(f"\n💡 Next steps:")
     print(f"  1. Use predictor.py for real-time predictions")
-    print(f"  2. Integrate Monte Carlo simulation into your trading system")
-    print(f"  3. Retrain model with new data as needed")
-    print(f"  4. Adjust config.py parameters for your specific use case")
+    print(f"  2. Use multi_crypto_orchestrator.py for multi-crypto predictions")
+    print(f"  3. Integrate Monte Carlo simulation into your trading system")
+    print(f"  4. Retrain model with new data as needed")
+    print(f"  5. Adjust config.py parameters for your specific use case")
 
 if __name__ == "__main__":
     try:
