@@ -96,7 +96,6 @@ class MultiCryptoOrchestrator:
             # If no new naming convention models found, try legacy naming
             if not model_files:
                 legacy_patterns = [
-                    f"models/best_model.pth",
                     f"models/{crypto_symbol}_best_model.pth"
                 ]
                 for pattern in legacy_patterns:
@@ -107,7 +106,14 @@ class MultiCryptoOrchestrator:
                         break
             
             if not model_files:
-                raise Exception(f"No trained model found for {crypto_symbol}. Please train a model first using: python trainer.py {crypto_symbol}")
+                # Check if there's a generic best_model.pth
+                if os.path.exists("models/best_model.pth"):
+                    raise Exception(f"No crypto-specific model found for {crypto_symbol}. "
+                                  f"Found generic 'best_model.pth' which is not compatible with multi-crypto system. "
+                                  f"Please train a new model using: python trainer.py {crypto_symbol}")
+                else:
+                    raise Exception(f"No trained model found for {crypto_symbol}. "
+                                  f"Please train a model first using: python trainer.py {crypto_symbol}")
             
             print(f"✅ Found {len(model_files)} model(s) for {crypto_symbol}")
             
@@ -323,7 +329,6 @@ def main():
             # If no new naming convention models found, try legacy naming
             if not model_files:
                 legacy_patterns = [
-                    f"models/best_model.pth",
                     f"models/{crypto_symbol}_best_model.pth"
                 ]
                 for pattern in legacy_patterns:
@@ -337,8 +342,14 @@ def main():
                 available_models.append(crypto_symbol)
                 print(f"  ✅ {crypto_symbol}: {len(model_files)} model(s) found")
             else:
+                # Check if there's a generic best_model.pth
+                if os.path.exists("models/best_model.pth"):
+                    print(f"  ❌ {crypto_symbol}: No crypto-specific model found")
+                    print(f"     ⚠️ Found generic 'best_model.pth' (old single-BTC system)")
+                    print(f"     💡 This model is not compatible with multi-crypto system")
+                else:
+                    print(f"  ❌ {crypto_symbol}: No models found")
                 missing_models.append(crypto_symbol)
-                print(f"  ❌ {crypto_symbol}: No models found")
         
         if missing_models:
             print(f"\n⚠️ Missing models for: {', '.join(missing_models)}")

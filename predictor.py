@@ -155,7 +155,7 @@ class RealTimeVolatilityPredictor:
     def load_latest_model(self) -> None:
         """
         Load the most recent trained model automatically for this cryptocurrency.
-        Supports both old naming convention (best_model.pth) and new naming convention ({crypto_symbol}_model_{timestamp}.pth)
+        Uses the new naming convention: {crypto_symbol}_model_{timestamp}.pth
         """
         print(f"🔍 Looking for models in: {self.config.MODEL_SAVE_PATH}")
         
@@ -166,25 +166,34 @@ class RealTimeVolatilityPredictor:
         all_files = os.listdir(self.config.MODEL_SAVE_PATH)
         print(f"📁 All files in models directory: {all_files}")
         
-        # First, try to find models with new naming convention
+        # Look for models with new naming convention for this specific crypto
         model_files = [f for f in all_files 
                       if f.startswith(f'{self.crypto_symbol}_model_') and f.endswith('.pth')]
         
-        print(f"🔍 Found {len(model_files)} models with new naming convention for {self.crypto_symbol}: {model_files}")
+        print(f"🔍 Found {len(model_files)} models for {self.crypto_symbol}: {model_files}")
         
-        # If no new naming convention models found, try old naming convention
+        # If no crypto-specific models found, try legacy naming convention
         if not model_files:
-            old_model_files = [f for f in all_files 
-                             if f == 'best_model.pth' or f.startswith(f'{self.crypto_symbol}_best_model.pth')]
-            if old_model_files:
-                model_files = old_model_files
+            legacy_model_files = [f for f in all_files 
+                                if f.startswith(f'{self.crypto_symbol}_best_model.pth')]
+            if legacy_model_files:
+                model_files = legacy_model_files
                 print(f"⚠️ Using legacy model naming convention for {self.crypto_config['name']} ({self.crypto_symbol})")
-                print(f"📁 Legacy models found: {old_model_files}")
+                print(f"📁 Legacy models found: {legacy_model_files}")
         
         if not model_files:
-            raise ValueError(f"No trained models found for {self.crypto_config['name']} ({self.crypto_symbol}). Please train a model first.")
+            # Check if there's a generic best_model.pth (old single-BTC system)
+            if 'best_model.pth' in all_files:
+                print(f"⚠️ Found generic 'best_model.pth' but this is not crypto-specific")
+                print(f"💡 This model was trained for the old single-BTC system")
+                print(f"💡 Please train a new model for {self.crypto_symbol} using: python trainer.py {self.crypto_symbol}")
+                raise ValueError(f"No crypto-specific model found for {self.crypto_config['name']} ({self.crypto_symbol}). "
+                               f"Found generic 'best_model.pth' which is not compatible with multi-crypto system.")
+            else:
+                raise ValueError(f"No trained models found for {self.crypto_config['name']} ({self.crypto_symbol}). "
+                               f"Please train a model first using: python trainer.py {self.crypto_symbol}")
         
-        # Sort by timestamp (newest first) for new naming convention, or use the first file for old naming convention
+        # Sort by timestamp (newest first) for new naming convention, or use the first file for legacy naming convention
         if model_files[0].startswith(f'{self.crypto_symbol}_model_'):
             model_files.sort(reverse=True)
             latest_model_file = model_files[0]
