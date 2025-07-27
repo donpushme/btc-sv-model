@@ -88,8 +88,8 @@ class Config:
     
     # Retraining settings for limited data
     RETRAIN_WITH_LIMITED_DATA = os.getenv('RETRAIN_WITH_LIMITED_DATA', 'true').lower() == 'true'
-    RETRAIN_MIN_DATA_POINTS = int(os.getenv('RETRAIN_MIN_DATA_POINTS', '50'))
-    RETRAIN_SMALL_WINDOWS = [3, 6, 12, 24]  # Smaller windows for limited data
+    RETRAIN_MIN_DATA_POINTS = int(os.getenv('RETRAIN_MIN_DATA_POINTS', '20'))  # Reduced from 50 to 20
+    RETRAIN_SMALL_WINDOWS = [3, 6, 12]  # Even smaller windows for very limited data
     RETRAIN_NORMAL_WINDOWS = [6, 12, 24, 48]  # Normal windows for sufficient data
     
     # Data retention settings (read from environment)

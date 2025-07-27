@@ -449,10 +449,12 @@ class CryptoVolatilityTrainer:
         print(f"📊 CSV sample:")
         print(df.head())
         
-        # For retraining, we need more data to handle rolling windows properly
-        # Use more data if available, but prioritize recent data
-        if len(df) < 1000:
+        # For retraining, be more flexible with data requirements
+        if len(df) < 100:
             print(f"⚠️ Very limited data available ({len(df)} points). Using all data for retraining.")
+            recent_df = df.copy()
+        elif len(df) < 500:
+            print(f"⚠️ Limited data available ({len(df)} points). Using all data for retraining.")
             recent_df = df.copy()
         else:
             # Filter to recent data only
@@ -461,32 +463,35 @@ class CryptoVolatilityTrainer:
             recent_df = df[df['timestamp'] >= cutoff_date].copy()
             
             # If we don't have enough recent data, use more historical data
-            if len(recent_df) < 500:
+            if len(recent_df) < 100:
                 print(f"⚠️ Limited recent data ({len(recent_df)} points). Using more historical data.")
-                # Use at least 500 data points or 60 days, whichever is more
-                min_data_points = max(500, len(df) // 2)
+                # Use at least 100 data points or 30 days, whichever is more
+                min_data_points = max(100, len(df) // 3)
                 recent_df = df.tail(min_data_points).copy()
         
         print(f"📊 Using {len(recent_df):,} data points for retraining")
         print(f"📊 Date range: {recent_df['timestamp'].min()} to {recent_df['timestamp'].max()}")
         
-        # Check if we have enough data
-        if len(recent_df) < 100:
-            print(f"❌ Insufficient data for retraining: {len(recent_df)} < 100 minimum required")
+        # Check if we have enough data - reduced minimum requirements
+        if len(recent_df) < 20:
+            print(f"❌ Insufficient data for retraining: {len(recent_df)} < 20 minimum required")
             return {
                 'success': False,
-                'error': f'Insufficient data: {len(recent_df)} < 100 minimum required',
+                'error': f'Insufficient data: {len(recent_df)} < 20 minimum required',
                 'data_points': len(recent_df)
             }
         
-        if len(recent_df) < 1000:
-            print("⚠️  Warning: Very small dataset for retraining. Consider using more days_back.")
+        if len(recent_df) < 100:
+            print("⚠️  Warning: Very small dataset for retraining. Model performance may be limited.")
         
         # Preprocess the recent data
         print(f"🔄 Starting preprocessing...")
         
         # Use smaller rolling windows if data is limited
-        if len(recent_df) < 1000:
+        if len(recent_df) < 200:
+            print(f"⚠️ Limited data detected ({len(recent_df)} points). Using very small rolling windows.")
+            return_windows = [6, 12]  # Very small windows
+        elif len(recent_df) < 500:
             print(f"⚠️ Limited data detected ({len(recent_df)} points). Using smaller rolling windows.")
             return_windows = self.config.RETRAIN_SMALL_WINDOWS
         else:
@@ -494,10 +499,18 @@ class CryptoVolatilityTrainer:
         
         print(f"📊 Using rolling windows: {return_windows}")
         
-        recent_df = processor.preprocess_data(
-            return_windows=return_windows,
-            prediction_horizon=self.config.PREDICTION_HORIZON
-        )
+        try:
+            recent_df = processor.preprocess_data(
+                return_windows=return_windows,
+                prediction_horizon=min(self.config.PREDICTION_HORIZON, len(recent_df) // 4)
+            )
+        except Exception as e:
+            print(f"❌ Error during preprocessing: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Preprocessing error: {str(e)}',
+                'data_points': len(recent_df)
+            }
         
         print(f"📊 After preprocessing: {len(recent_df)} data points")
         
@@ -515,7 +528,7 @@ class CryptoVolatilityTrainer:
         print(f"📊 After removing NaN values: {final_rows} data points (removed {initial_rows - final_rows})")
         print(f"Final recent dataset shape: {recent_df.shape}")
         
-        # Check if we still have enough data after preprocessing
+        # Check if we still have enough data after preprocessing - reduced minimum
         if len(recent_df) == 0:
             print(f"❌ No data points after preprocessing. This indicates a data quality issue.")
             print(f"💡 Possible causes:")
@@ -529,11 +542,11 @@ class CryptoVolatilityTrainer:
                 'data_points': 0
             }
         
-        if len(recent_df) < 50:
-            print(f"❌ Insufficient data after preprocessing: {len(recent_df)} < 50 minimum required")
+        if len(recent_df) < 10:
+            print(f"❌ Insufficient data after preprocessing: {len(recent_df)} < 10 minimum required")
             return {
                 'success': False,
-                'error': f'Insufficient data after preprocessing: {len(recent_df)} < 50 minimum required',
+                'error': f'Insufficient data after preprocessing: {len(recent_df)} < 10 minimum required',
                 'data_points': len(recent_df)
             }
         

@@ -143,11 +143,11 @@ class CryptoDataProcessor:
         df['target_skewness'] = np.nan
         df['target_kurtosis'] = np.nan
         
-        # For limited data, use a shorter prediction horizon
+        # For limited data, use a much shorter prediction horizon
         available_data = len(df)
         if available_data < prediction_horizon * 2:
-            # If we have very limited data, use a shorter horizon
-            adaptive_horizon = max(24, available_data // 4)  # At least 24 periods, max 1/4 of data
+            # If we have very limited data, use a much shorter horizon
+            adaptive_horizon = max(12, min(available_data // 3, 48))  # Between 12 and 48 periods
             print(f"⚠️ Limited data ({available_data} points). Using adaptive prediction horizon: {adaptive_horizon}")
             prediction_horizon = adaptive_horizon
         
@@ -155,11 +155,14 @@ class CryptoDataProcessor:
         for i in range(len(df) - prediction_horizon):
             future_returns = df['return'].iloc[i+1:i+1+prediction_horizon]
             
-            if len(future_returns) >= prediction_horizon * 0.8:  # Allow 20% tolerance
+            # More lenient tolerance for limited data
+            min_required = max(6, prediction_horizon // 4)  # At least 6 periods or 25% of horizon
+            
+            if len(future_returns) >= min_required:
                 # Remove any NaN values from future returns
                 future_returns = future_returns.dropna()
                 
-                if len(future_returns) >= prediction_horizon * 0.5:  # Need at least 50% of expected data
+                if len(future_returns) >= min_required:
                     volatility = future_returns.std()
                     skewness = future_returns.skew()
                     kurtosis = future_returns.kurt()  # This is excess kurtosis
@@ -187,7 +190,7 @@ class CryptoDataProcessor:
     def preprocess_data(self, return_windows: list = [6, 12, 24, 48],
                        prediction_horizon: int = 288) -> pd.DataFrame:
         """
-        Complete preprocessing pipeline.
+        Complete preprocessing pipeline with enhanced robustness for limited data.
         """
         if self.data is None:
             self.load_data()
@@ -195,8 +198,25 @@ class CryptoDataProcessor:
         print("Calculating returns...")
         df = self.calculate_returns()
         
+        # Handle NaN values in returns more aggressively
+        initial_rows = len(df)
+        df['return'] = df['return'].fillna(method='ffill').fillna(method='bfill').fillna(0)
+        df['log_return'] = df['log_return'].fillna(method='ffill').fillna(method='bfill').fillna(0)
+        print(f"📊 Filled NaN values in returns. Rows: {initial_rows} -> {len(df)}")
+        
         print("Adding time features...")
         df = self.add_time_features(df)
+        
+        # Adjust rolling windows for limited data
+        available_data = len(df)
+        if available_data < 500:
+            print(f"⚠️ Limited data detected ({available_data} points). Using smaller rolling windows.")
+            # Use smaller windows for limited data
+            adjusted_windows = [w for w in return_windows if w <= available_data // 4]
+            if not adjusted_windows:
+                adjusted_windows = [6, 12]  # Fallback to very small windows
+            return_windows = adjusted_windows
+            print(f"📊 Adjusted rolling windows: {return_windows}")
         
         print("Calculating rolling statistics...")
         df = self.calculate_rolling_statistics(df, return_windows)
@@ -211,34 +231,41 @@ class CryptoDataProcessor:
         for col, count in nan_counts[nan_counts > 0].items():
             print(f"  {col}: {count} NaN values")
         
-        # Remove rows with NaN values
-        df = df.dropna().reset_index(drop=True)
+        # More aggressive NaN handling for limited data
+        if initial_rows < 500:
+            print(f"⚠️ Limited data detected. Using aggressive NaN handling...")
+            
+            # Fill NaN values in rolling statistics with forward/backward fill
+            rolling_cols = [col for col in df.columns if any(window in col for window in ['volatility_', 'skewness_', 'kurtosis_', 'return_mean_', 'return_std_', 'price_momentum_'])]
+            for col in rolling_cols:
+                df[col] = df[col].fillna(method='ffill').fillna(method='bfill').fillna(0)
+            
+            # Fill target NaN values with reasonable defaults
+            df['target_volatility'] = df['target_volatility'].fillna(0.02)  # 2% volatility
+            df['target_skewness'] = df['target_skewness'].fillna(0.0)  # No skew
+            df['target_kurtosis'] = df['target_kurtosis'].fillna(0.0)  # Normal kurtosis
+            
+            # Fill any remaining NaN values with 0
+            df = df.fillna(0)
+            
+            print(f"📊 After aggressive NaN handling: {len(df)} data points")
+        else:
+            # Remove rows with NaN values for larger datasets
+            df = df.dropna().reset_index(drop=True)
+        
         final_rows = len(df)
         
-        print(f"Removed {initial_rows - final_rows} rows with NaN values")
-        print(f"Final dataset shape: {df.shape}")
-        
-        # If we have very few data points, try to fill some NaN values
-        if final_rows < 50 and initial_rows > 100:
-            print(f"⚠️ Very limited data after preprocessing ({final_rows} points). Attempting to fill some NaN values...")
-            
-            # Try to fill target NaN values with reasonable defaults
-            df_filled = df.copy()
-            df_filled['target_volatility'] = df_filled['target_volatility'].fillna(0.02)  # 2% volatility
-            df_filled['target_skewness'] = df_filled['target_skewness'].fillna(0.0)  # No skew
-            df_filled['target_kurtosis'] = df_filled['target_kurtosis'].fillna(0.0)  # Normal kurtosis
-            
-            # Remove remaining NaN values
-            df_filled = df_filled.dropna().reset_index(drop=True)
-            filled_rows = len(df_filled)
-            
-            if filled_rows > final_rows:
-                print(f"✅ Filled NaN values: {final_rows} -> {filled_rows} data points")
-                df = df_filled
-                final_rows = filled_rows
+        print(f"📊 Data preprocessing summary:")
+        print(f"  Initial rows: {initial_rows}")
+        print(f"  Final rows: {final_rows}")
+        print(f"  Rows removed: {initial_rows - final_rows}")
+        print(f"  Final dataset shape: {df.shape}")
         
         if final_rows == 0:
             raise ValueError(f"❌ No valid data points after preprocessing. Initial: {initial_rows}, Final: {final_rows}")
+        
+        if final_rows < 10:
+            print(f"⚠️ Very limited data after preprocessing ({final_rows} points). This may affect model performance.")
         
         self.processed_data = df
         return df

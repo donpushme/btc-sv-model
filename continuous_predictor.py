@@ -641,15 +641,15 @@ class ContinuousCryptoPredictor:
             print(training_data.info())
             
             # More flexible data requirements for retraining
-            min_data_points = max(100, self.min_new_data_points // 2)  # Lower threshold for retraining
+            min_data_points = max(20, self.min_new_data_points // 4)  # Much lower threshold for retraining
             
             if len(training_data) < min_data_points:
                 print(f"⚠️ Limited training data: {len(training_data)} < {min_data_points}")
                 print("💡 Will attempt retraining with available data")
             
-            # Additional check for minimum data requirements
-            if len(training_data) < 50:
-                print(f"⚠️ Very limited training data: {len(training_data)} < 50 minimum for retraining")
+            # Additional check for minimum data requirements - reduced from 50 to 20
+            if len(training_data) < 20:
+                print(f"⚠️ Very limited training data: {len(training_data)} < 20 minimum for retraining")
                 print("💡 This might cause training issues. Consider collecting more data first.")
                 return False
             

@@ -15,49 +15,93 @@ class FeatureEngineer:
         self.feature_names = []
         
     def add_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add technical analysis indicators."""
+        """Add technical analysis indicators with adaptive windows for limited data."""
+        
+        data_length = len(df)
+        
+        # Adaptive windows based on data availability
+        if data_length < 100:
+            # Very limited data - use only small windows
+            sma_windows = [6, 12]
+            ema_spans = [6, 12]
+            bb_windows = [12]
+            rsi_windows = [6, 12]
+            print(f"⚠️ Limited data ({data_length} points). Using small technical indicator windows.")
+        elif data_length < 300:
+            # Limited data - use medium windows
+            sma_windows = [12, 24, 48]
+            ema_spans = [12, 24]
+            bb_windows = [24]
+            rsi_windows = [12, 24]
+            print(f"⚠️ Moderate data ({data_length} points). Using medium technical indicator windows.")
+        else:
+            # Sufficient data - use full windows
+            sma_windows = [12, 24, 48, 96]  # 1h, 2h, 4h, 8h
+            ema_spans = [12, 24, 48]
+            bb_windows = [24, 48]
+            rsi_windows = [14, 24]
         
         # Simple Moving Averages
-        for window in [12, 24, 48, 96]:  # 1h, 2h, 4h, 8h
-            df[f'sma_{window}'] = df['close'].rolling(window=window).mean()
-            df[f'price_vs_sma_{window}'] = df['close'] / df[f'sma_{window}'] - 1
+        for window in sma_windows:
+            if window <= data_length // 2:  # Only add if window is reasonable
+                df[f'sma_{window}'] = df['close'].rolling(window=window).mean()
+                df[f'price_vs_sma_{window}'] = df['close'] / df[f'sma_{window}'] - 1
         
         # Exponential Moving Averages
-        for span in [12, 24, 48]:
-            df[f'ema_{span}'] = df['close'].ewm(span=span).mean()
-            df[f'price_vs_ema_{span}'] = df['close'] / df[f'ema_{span}'] - 1
+        for span in ema_spans:
+            if span <= data_length // 2:
+                df[f'ema_{span}'] = df['close'].ewm(span=span).mean()
+                df[f'price_vs_ema_{span}'] = df['close'] / df[f'ema_{span}'] - 1
         
         # Bollinger Bands
-        for window in [24, 48]:
-            rolling_mean = df['close'].rolling(window=window).mean()
-            rolling_std = df['close'].rolling(window=window).std()
-            df[f'bb_upper_{window}'] = rolling_mean + (rolling_std * 2)
-            df[f'bb_lower_{window}'] = rolling_mean - (rolling_std * 2)
-            df[f'bb_position_{window}'] = (df['close'] - df[f'bb_lower_{window}']) / \
-                                        (df[f'bb_upper_{window}'] - df[f'bb_lower_{window}'])
+        for window in bb_windows:
+            if window <= data_length // 2:
+                rolling_mean = df['close'].rolling(window=window).mean()
+                rolling_std = df['close'].rolling(window=window).std()
+                df[f'bb_upper_{window}'] = rolling_mean + (rolling_std * 2)
+                df[f'bb_lower_{window}'] = rolling_mean - (rolling_std * 2)
+                df[f'bb_position_{window}'] = (df['close'] - df[f'bb_lower_{window}']) / \
+                                            (df[f'bb_upper_{window}'] - df[f'bb_lower_{window}'])
         
         # RSI (Relative Strength Index)
         def calculate_rsi(prices, window=14):
+            if window >= len(prices):
+                return pd.Series([np.nan] * len(prices))
             delta = prices.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
             rs = gain / loss
             return 100 - (100 / (1 + rs))
         
-        df['rsi_14'] = calculate_rsi(df['close'], 14)
-        df['rsi_24'] = calculate_rsi(df['close'], 24)
+        for window in rsi_windows:
+            if window <= data_length // 2:
+                df[f'rsi_{window}'] = calculate_rsi(df['close'], window)
         
-        # MACD
-        ema_12 = df['close'].ewm(span=12).mean()
-        ema_26 = df['close'].ewm(span=26).mean()
-        df['macd'] = ema_12 - ema_26
-        df['macd_signal'] = df['macd'].ewm(span=9).mean()
-        df['macd_histogram'] = df['macd'] - df['macd_signal']
+        # MACD (only if we have enough data)
+        if data_length >= 50:
+            ema_12 = df['close'].ewm(span=12).mean()
+            ema_26 = df['close'].ewm(span=26).mean()
+            df['macd'] = ema_12 - ema_26
+            df['macd_signal'] = df['macd'].ewm(span=9).mean()
+            df['macd_histogram'] = df['macd'] - df['macd_signal']
         
         return df
     
     def add_volatility_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add various volatility measures."""
+        """Add various volatility measures with adaptive windows."""
+        
+        data_length = len(df)
+        
+        # Adaptive windows based on data availability
+        if data_length < 100:
+            atr_windows = [6, 12]
+            realized_vol_windows = [6, 12]
+        elif data_length < 300:
+            atr_windows = [12, 24]
+            realized_vol_windows = [12, 24, 48]
+        else:
+            atr_windows = [12, 24, 48]
+            realized_vol_windows = [12, 24, 48, 96]
         
         # Garman-Klass volatility estimator
         df['gk_volatility'] = np.sqrt(
@@ -73,13 +117,15 @@ class FeatureEngineer:
         )
         
         # Average True Range (ATR)
-        for window in [12, 24, 48]:
-            df[f'atr_{window}'] = df['true_range'].rolling(window=window).mean()
-            df[f'atr_ratio_{window}'] = df['true_range'] / df[f'atr_{window}']
+        for window in atr_windows:
+            if window <= data_length // 2:
+                df[f'atr_{window}'] = df['true_range'].rolling(window=window).mean()
+                df[f'atr_ratio_{window}'] = df['true_range'] / df[f'atr_{window}']
         
         # Realized volatility at different scales
-        for window in [12, 24, 48, 96]:
-            df[f'realized_vol_{window}'] = df['return'].rolling(window=window).std() * np.sqrt(288)  # Annualized
+        for window in realized_vol_windows:
+            if window <= data_length // 2:
+                df[f'realized_vol_{window}'] = df['return'].rolling(window=window).std() * np.sqrt(288)  # Annualized
         
         return df
     
@@ -128,21 +174,56 @@ class FeatureEngineer:
         return df
     
     def engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Complete feature engineering pipeline."""
+        """Complete feature engineering pipeline with enhanced robustness for limited data."""
         
-        print("Adding technical indicators...")
-        df = self.add_technical_indicators(df)
+        initial_rows = len(df)
+        print(f"🔄 Starting feature engineering with {initial_rows} data points...")
         
-        print("Adding volatility features...")
-        df = self.add_volatility_features(df)
-        
-        print("Adding microstructure features...")
-        df = self.add_market_microstructure_features(df)
-        
-        print("Adding regime features...")
-        df = self.add_regime_features(df)
-        
-        return df
+        try:
+            print("Adding technical indicators...")
+            df = self.add_technical_indicators(df)
+            
+            print("Adding volatility features...")
+            df = self.add_volatility_features(df)
+            
+            print("Adding microstructure features...")
+            df = self.add_market_microstructure_features(df)
+            
+            print("Adding regime features...")
+            df = self.add_regime_features(df)
+            
+            # Handle NaN values more aggressively for limited data
+            if initial_rows < 500:
+                print(f"⚠️ Limited data detected. Using aggressive NaN handling in feature engineering...")
+                
+                # Fill NaN values in technical indicators with forward/backward fill
+                technical_cols = [col for col in df.columns if any(indicator in col for indicator in 
+                    ['sma_', 'ema_', 'bb_', 'rsi_', 'macd_', 'atr_', 'realized_vol_'])]
+                
+                for col in technical_cols:
+                    if col in df.columns:
+                        df[col] = df[col].fillna(method='ffill').fillna(method='bfill').fillna(0)
+                
+                # Fill any remaining NaN values with 0
+                df = df.fillna(0)
+                
+                print(f"📊 After feature engineering NaN handling: {len(df)} data points")
+            else:
+                # For larger datasets, remove rows with NaN values
+                initial_feature_rows = len(df)
+                df = df.dropna().reset_index(drop=True)
+                final_feature_rows = len(df)
+                
+                if final_feature_rows < initial_feature_rows:
+                    print(f"📊 Removed {initial_feature_rows - final_feature_rows} rows with NaN values during feature engineering")
+            
+            print(f"✅ Feature engineering completed. Final shape: {df.shape}")
+            return df
+            
+        except Exception as e:
+            print(f"❌ Error during feature engineering: {str(e)}")
+            # Return original dataframe if feature engineering fails
+            return df
     
     def prepare_sequences(self, df: pd.DataFrame, feature_cols: List[str], 
                          target_cols: List[str], sequence_length: int) -> Tuple[np.ndarray, np.ndarray]:
