@@ -85,6 +85,16 @@ class MultiCryptoOrchestrator:
         try:
             print(f"🔄 Starting {Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']} ({crypto_symbol}) predictor thread...")
             
+            # Check if model exists before starting
+            import glob
+            model_pattern = f"models/{crypto_symbol}_model_*.pth"
+            model_files = glob.glob(model_pattern)
+            
+            if not model_files:
+                raise Exception(f"No trained model found for {crypto_symbol}. Please train a model first using: python trainer.py {crypto_symbol}")
+            
+            print(f"✅ Found {len(model_files)} model(s) for {crypto_symbol}")
+            
             # Initialize predictor for this crypto
             predictor = ContinuousCryptoPredictor(crypto_symbol=crypto_symbol)
             self.predictors[crypto_symbol] = predictor
@@ -92,7 +102,7 @@ class MultiCryptoOrchestrator:
             # Get prediction interval from environment
             interval_minutes = int(os.getenv('PREDICTION_INTERVAL_MINUTES', '5'))
             
-            # Start continuous prediction
+            # Start continuous prediction (this will run until stopped)
             predictor.start_continuous_prediction(interval_minutes=interval_minutes)
             
         except Exception as e:
@@ -104,6 +114,10 @@ class MultiCryptoOrchestrator:
                     'error': str(e),
                     'timestamp': datetime.utcnow()
                 })
+            
+            # Remove the failed predictor from the dictionary
+            if crypto_symbol in self.predictors:
+                del self.predictors[crypto_symbol]
     
     def start(self):
         """Start continuous prediction for all cryptocurrencies."""
@@ -149,6 +163,15 @@ class MultiCryptoOrchestrator:
                 # Restart dead threads
                 for crypto_symbol in dead_threads:
                     if self.is_running:
+                        # Clean up any existing predictor
+                        if crypto_symbol in self.predictors:
+                            try:
+                                self.predictors[crypto_symbol].stop()
+                            except:
+                                pass
+                            del self.predictors[crypto_symbol]
+                        
+                        # Start new thread
                         thread = threading.Thread(
                             target=self._run_crypto_predictor,
                             args=(crypto_symbol,),
@@ -157,6 +180,7 @@ class MultiCryptoOrchestrator:
                         )
                         self.threads[crypto_symbol] = thread
                         thread.start()
+                        print(f"✅ Restarted thread for {crypto_symbol}")
                 
                 # Update statistics
                 self._update_stats()
@@ -182,6 +206,16 @@ class MultiCryptoOrchestrator:
             
             self.stats['total_cycles'] = total_cycles
             self.stats['total_predictions'] = total_predictions
+            
+            # Print status every 5 minutes
+            if self.stats['total_cycles'] % 10 == 0 and self.stats['total_cycles'] > 0:
+                print(f"\n📊 Multi-Crypto Status Update:")
+                print(f"   Active predictors: {len(self.predictors)}/{len(self.crypto_symbols)}")
+                print(f"   Total cycles: {total_cycles}")
+                print(f"   Total predictions: {total_predictions:,}")
+                for crypto_symbol, predictor in self.predictors.items():
+                    if predictor and hasattr(predictor, 'prediction_cycles'):
+                        print(f"   {crypto_symbol}: {predictor.prediction_cycles} cycles, {predictor.total_predictions_made:,} predictions")
     
     def stop(self):
         """Stop all cryptocurrency predictors."""
@@ -257,6 +291,35 @@ def main():
             print(f"📊 Running for specified cryptocurrencies: {', '.join(crypto_symbols)}")
         else:
             print(f"📊 Running for all supported cryptocurrencies: {', '.join(Config.SUPPORTED_CRYPTOS.keys())}")
+        
+        # Pre-flight check: Verify models exist
+        print("\n🔍 Pre-flight check: Verifying trained models...")
+        import glob
+        missing_models = []
+        available_models = []
+        
+        for crypto_symbol in crypto_symbols:
+            model_pattern = f"models/{crypto_symbol}_model_*.pth"
+            model_files = glob.glob(model_pattern)
+            
+            if model_files:
+                available_models.append(crypto_symbol)
+                print(f"  ✅ {crypto_symbol}: {len(model_files)} model(s) found")
+            else:
+                missing_models.append(crypto_symbol)
+                print(f"  ❌ {crypto_symbol}: No models found")
+        
+        if missing_models:
+            print(f"\n⚠️ Missing models for: {', '.join(missing_models)}")
+            print("💡 To train models, run:")
+            for crypto_symbol in missing_models:
+                print(f"   python trainer.py {crypto_symbol}")
+            print(f"\n🚀 Proceeding with available models: {', '.join(available_models)}")
+            crypto_symbols = available_models
+        
+        if not crypto_symbols:
+            print("❌ No trained models found. Please train at least one model first.")
+            return
         
         # Initialize orchestrator
         orchestrator = MultiCryptoOrchestrator(crypto_symbols=crypto_symbols)
