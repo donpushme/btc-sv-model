@@ -42,50 +42,103 @@ class RealTimeVolatilityPredictor:
         if model_path:
             self.load_model(model_path)
         else:
-            # Try to load default model for this crypto
-            default_path = os.path.join(self.config.MODEL_SAVE_PATH, f'{self.crypto_symbol}_best_model.pth')
-            if os.path.exists(default_path):
-                self.load_model(default_path)
-            else:
-                print(f"No model found for {self.crypto_config['name']} ({crypto_symbol}). Please provide model_path or train a model first.")
+            # Try to load the latest model for this crypto
+            try:
+                self.load_latest_model()
+            except Exception as e:
+                print(f"❌ Failed to load model for {self.crypto_config['name']} ({crypto_symbol}): {str(e)}")
+                print(f"💡 Please train a model first using: python trainer.py {crypto_symbol}")
+                raise
     
     def load_model(self, model_path: str):
         """
         Load trained model and preprocessing components.
         """
         try:
+            print(f"🔍 Loading model from: {model_path}")
+            
             # Use safe loading utility to handle PyTorch 2.6+ weights_only changes
             from utils import safe_torch_load
             checkpoint = safe_torch_load(model_path, map_location=self.device)
             
+            print(f"✅ Checkpoint loaded successfully")
+            print(f"📊 Checkpoint keys: {list(checkpoint.keys())}")
+            
             # Load model configuration
             model_config = checkpoint['config']
+            print(f"📊 Model config type: {type(model_config)}")
+            
+            # Handle both dict and Config object
+            if isinstance(model_config, dict):
+                config_dict = model_config
+            else:
+                # If it's a Config object, extract the needed values
+                config_dict = {
+                    'INPUT_SIZE': model_config.INPUT_SIZE,
+                    'HIDDEN_SIZE': model_config.HIDDEN_SIZE,
+                    'NUM_LAYERS': model_config.NUM_LAYERS,
+                    'OUTPUT_SIZE': model_config.OUTPUT_SIZE,
+                    'DROPOUT': model_config.DROPOUT,
+                    'SEQUENCE_LENGTH': model_config.SEQUENCE_LENGTH
+                }
+            
+            print(f"📊 Config dict: {config_dict}")
             
             # Initialize model
             self.model = VolatilityLSTM(
-                input_size=model_config['INPUT_SIZE'],
-                hidden_size=model_config['HIDDEN_SIZE'],
-                num_layers=model_config['NUM_LAYERS'],
-                output_size=model_config['OUTPUT_SIZE'],
-                dropout=model_config['DROPOUT']
+                input_size=config_dict['INPUT_SIZE'],
+                hidden_size=config_dict['HIDDEN_SIZE'],
+                num_layers=config_dict['NUM_LAYERS'],
+                output_size=config_dict['OUTPUT_SIZE'],
+                dropout=config_dict['DROPOUT']
             ).to(self.device)
+            
+            print(f"✅ Model initialized")
             
             # Load model weights
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.model.eval()
             
+            print(f"✅ Model weights loaded and set to eval mode")
+            
             # Load preprocessing components
             self.feature_cols = checkpoint['feature_cols']
             self.target_cols = checkpoint['target_cols']
-            self.feature_engineer.scalers['features'] = checkpoint['feature_scaler']
-            self.feature_engineer.scalers['targets'] = checkpoint['target_scaler']
+            
+            # Try to load scalers from the separate feature engineer file
+            feature_engineer_path = model_path.replace('.pth', '_feature_engineer.pkl')
+            if os.path.exists(feature_engineer_path):
+                try:
+                    with open(feature_engineer_path, 'rb') as f:
+                        feature_engineer = pickle.load(f)
+                    self.feature_engineer.scalers = feature_engineer.scalers
+                    print(f"✅ Scalers loaded from feature engineer file: {feature_engineer_path}")
+                except Exception as e:
+                    print(f"⚠️ Failed to load scalers from feature engineer file: {str(e)}")
+                    print(f"⚠️ Will need to fit scalers")
+            else:
+                print(f"⚠️ Feature engineer file not found: {feature_engineer_path}")
+                print(f"⚠️ Will need to fit scalers")
+            
             self.feature_engineer.feature_names = self.feature_cols
             
-            # Update config
-            self.config.INPUT_SIZE = model_config['INPUT_SIZE']
-            self.config.SEQUENCE_LENGTH = model_config['SEQUENCE_LENGTH']
+            # Check if scalers are properly loaded
+            if not hasattr(self.feature_engineer.scalers, 'get') or not self.feature_engineer.scalers.get('features'):
+                print(f"⚠️ Scalers not properly loaded, will need to fit them during first prediction")
+                self.scalers_need_fitting = True
+            else:
+                self.scalers_need_fitting = False
+                print(f"✅ Scalers are ready for prediction")
             
-            print(f"Model loaded successfully from {model_path}")
+            print(f"✅ Preprocessing components loaded")
+            print(f"📊 Feature columns: {len(self.feature_cols)} features")
+            print(f"📊 Target columns: {self.target_cols}")
+            
+            # Update config
+            self.config.INPUT_SIZE = config_dict['INPUT_SIZE']
+            self.config.SEQUENCE_LENGTH = config_dict['SEQUENCE_LENGTH']
+            
+            print(f"✅ Model loaded successfully from {model_path}")
             print(f"Model trained on {len(self.feature_cols)} features for {self.crypto_config['name']} ({self.crypto_symbol})")
             print(f"Validation metrics from training:")
             val_metrics = checkpoint.get('val_metrics', {})
@@ -93,31 +146,60 @@ class RealTimeVolatilityPredictor:
                 print(f"  {key}: {value:.4f}")
                 
         except Exception as e:
+            print(f"❌ Error loading model: {str(e)}")
+            print(f"❌ Error type: {type(e).__name__}")
+            import traceback
+            print(f"❌ Traceback: {traceback.format_exc()}")
             raise Exception(f"Failed to load model: {str(e)}")
     
     def load_latest_model(self) -> None:
         """
         Load the most recent trained model automatically for this cryptocurrency.
+        Supports both old naming convention (best_model.pth) and new naming convention ({crypto_symbol}_model_{timestamp}.pth)
         """
+        print(f"🔍 Looking for models in: {self.config.MODEL_SAVE_PATH}")
+        
         if not os.path.exists(self.config.MODEL_SAVE_PATH):
             raise ValueError(f"Model directory not found: {self.config.MODEL_SAVE_PATH}")
         
-        # Find all model files for this crypto
-        model_files = [f for f in os.listdir(self.config.MODEL_SAVE_PATH) 
+        # List all files in the models directory
+        all_files = os.listdir(self.config.MODEL_SAVE_PATH)
+        print(f"📁 All files in models directory: {all_files}")
+        
+        # First, try to find models with new naming convention
+        model_files = [f for f in all_files 
                       if f.startswith(f'{self.crypto_symbol}_model_') and f.endswith('.pth')]
+        
+        print(f"🔍 Found {len(model_files)} models with new naming convention for {self.crypto_symbol}: {model_files}")
+        
+        # If no new naming convention models found, try old naming convention
+        if not model_files:
+            old_model_files = [f for f in all_files 
+                             if f == 'best_model.pth' or f.startswith(f'{self.crypto_symbol}_best_model.pth')]
+            if old_model_files:
+                model_files = old_model_files
+                print(f"⚠️ Using legacy model naming convention for {self.crypto_config['name']} ({self.crypto_symbol})")
+                print(f"📁 Legacy models found: {old_model_files}")
         
         if not model_files:
             raise ValueError(f"No trained models found for {self.crypto_config['name']} ({self.crypto_symbol}). Please train a model first.")
         
-        # Sort by timestamp (newest first)
-        model_files.sort(reverse=True)
-        latest_model_file = model_files[0]
-        
-        # Extract model version from filename
-        model_version = latest_model_file.replace(f'{self.crypto_symbol}_model_', '').replace('.pth', '')
+        # Sort by timestamp (newest first) for new naming convention, or use the first file for old naming convention
+        if model_files[0].startswith(f'{self.crypto_symbol}_model_'):
+            model_files.sort(reverse=True)
+            latest_model_file = model_files[0]
+            # Extract model version from filename
+            model_version = latest_model_file.replace(f'{self.crypto_symbol}_model_', '').replace('.pth', '')
+            print(f"📊 Using newest model: {latest_model_file} (version: {model_version})")
+        else:
+            latest_model_file = model_files[0]
+            model_version = "legacy"
+            print(f"📊 Using legacy model: {latest_model_file}")
         
         # Load the latest model
         model_path = os.path.join(self.config.MODEL_SAVE_PATH, latest_model_file)
+        print(f"🔍 Loading model from: {model_path}")
+        
         self.load_model(model_path)
         
         print(f"✅ Loaded latest model for {self.crypto_config['name']} ({self.crypto_symbol}): {model_version}")
@@ -179,6 +261,9 @@ class RealTimeVolatilityPredictor:
             Dictionary with predictions
         """
         if self.model is None:
+            print(f"❌ Model is None for {self.crypto_symbol}")
+            print(f"❌ Feature columns: {self.feature_cols}")
+            print(f"❌ Target columns: {self.target_cols}")
             raise ValueError("Model not loaded. Please load a model first.")
         
         # Preprocess the data
@@ -191,6 +276,20 @@ class RealTimeVolatilityPredictor:
         
         # Scale the features
         df_scaled = df.copy()
+        
+        # Check if scalers need to be fitted
+        if hasattr(self, 'scalers_need_fitting') and self.scalers_need_fitting:
+            print(f"🔧 Fitting scalers with current data...")
+            # Create dummy target data for fitting (we don't have targets for prediction)
+            dummy_targets = pd.DataFrame({
+                'target_volatility': [0.02] * len(df),
+                'target_skewness': [0.0] * len(df),
+                'target_kurtosis': [3.0] * len(df)
+            })
+            self.feature_engineer.fit_scalers(df[self.feature_cols], dummy_targets)
+            self.scalers_need_fitting = False
+            print(f"✅ Scalers fitted successfully")
+        
         df_scaled[self.feature_cols] = self.feature_engineer.scalers['features'].transform(
             df[self.feature_cols]
         )

@@ -85,10 +85,26 @@ class MultiCryptoOrchestrator:
         try:
             print(f"🔄 Starting {Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']} ({crypto_symbol}) predictor thread...")
             
-            # Check if model exists before starting
+            # Check if model exists before starting (support both new and legacy naming)
             import glob
+            import os
+            
+            # Try new naming convention first
             model_pattern = f"models/{crypto_symbol}_model_*.pth"
             model_files = glob.glob(model_pattern)
+            
+            # If no new naming convention models found, try legacy naming
+            if not model_files:
+                legacy_patterns = [
+                    f"models/best_model.pth",
+                    f"models/{crypto_symbol}_best_model.pth"
+                ]
+                for pattern in legacy_patterns:
+                    legacy_files = glob.glob(pattern)
+                    if legacy_files:
+                        model_files = legacy_files
+                        print(f"⚠️ Using legacy model naming convention for {crypto_symbol}")
+                        break
             
             if not model_files:
                 raise Exception(f"No trained model found for {crypto_symbol}. Please train a model first using: python trainer.py {crypto_symbol}")
@@ -300,8 +316,22 @@ def main():
         available_models = []
         
         for crypto_symbol in crypto_symbols:
+            # Try new naming convention first
             model_pattern = f"models/{crypto_symbol}_model_*.pth"
             model_files = glob.glob(model_pattern)
+            
+            # If no new naming convention models found, try legacy naming
+            if not model_files:
+                legacy_patterns = [
+                    f"models/best_model.pth",
+                    f"models/{crypto_symbol}_best_model.pth"
+                ]
+                for pattern in legacy_patterns:
+                    legacy_files = glob.glob(pattern)
+                    if legacy_files:
+                        model_files = legacy_files
+                        print(f"  ⚠️ {crypto_symbol}: {len(model_files)} legacy model(s) found")
+                        break
             
             if model_files:
                 available_models.append(crypto_symbol)
