@@ -44,8 +44,10 @@ def train_crypto_model(crypto_symbol: str) -> bool:
         training_history = trainer.train(data_path)
         
         if training_history:
+            # Get the final validation loss from the last validation metrics
+            final_val_loss = training_history['val_losses'][-1] if training_history['val_losses'] else 0.0
             print(f"✅ {crypto_name} model training completed successfully!")
-            print(f"📊 Final validation loss: {training_history['final_val_loss']:.6f}")
+            print(f"📊 Final validation loss: {final_val_loss:.6f}")
             return True
         else:
             print(f"❌ {crypto_name} model training failed")
