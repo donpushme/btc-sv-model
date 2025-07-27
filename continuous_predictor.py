@@ -102,9 +102,8 @@ class ContinuousCryptoPredictor:
                 print(f"⚠️ Training system initialization failed: {str(e)}")
                 self.enable_online_learning = False
         
-        # Setup signal handlers for graceful shutdown
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # Note: Signal handlers are managed by the orchestrator in multi-threaded mode
+        # Individual predictors don't set up signal handlers to avoid thread conflicts
         
         print(f"✅ Continuous predictor initialized for {self.crypto_config['name']} ({crypto_symbol})")
         print(f"📊 Symbol: {self.symbol}")
@@ -128,11 +127,7 @@ class ContinuousCryptoPredictor:
         except:
             return "unknown"
     
-    def _signal_handler(self, signum, frame):
-        """Handle shutdown signals gracefully."""
-        print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
-        self.stop()
-        sys.exit(0)
+
     
     def fetch_crypto_data_from_api(self, hours_back: int = 120) -> pd.DataFrame:
         """
