@@ -247,7 +247,7 @@ def analyze_xau_specific_patterns():
     for hour in range(24):
         if hour in hourly_stats.index:
             stats = hourly_stats.loc[hour]
-            print(f"{hour:4d} | {stats['mean']*100:9.4f}% | {stats['std']*100:7.4f}% | {stats['count']:5d}")
+            print(f"{hour:4d} | {stats['mean']*100:9.4f}% | {stats['std']*100:7.4f}% | {int(stats['count']):5d}")
     
     # Monthly patterns
     monthly_stats = df.groupby('month')['return'].agg(['mean', 'std', 'count'])
@@ -257,7 +257,7 @@ def analyze_xau_specific_patterns():
     for month in range(1, 13):
         if month in monthly_stats.index:
             stats = monthly_stats.loc[month]
-            print(f"{month:5d} | {stats['mean']*100:9.4f}% | {stats['std']*100:7.4f}% | {stats['count']:5d}")
+            print(f"{month:5d} | {stats['mean']*100:9.4f}% | {stats['std']*100:7.4f}% | {int(stats['count']):5d}")
 
 def main():
     """Main analysis function."""
