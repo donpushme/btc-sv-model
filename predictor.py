@@ -106,7 +106,7 @@ class RealTimeVolatilityPredictor:
             self.target_cols = checkpoint['target_cols']
             
             # Try to load scalers from the separate feature engineer file
-            feature_engineer_path = model_path.replace('.pth', '_feature_engineer.pkl')
+            feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer.pkl")
             if os.path.exists(feature_engineer_path):
                 try:
                     with open(feature_engineer_path, 'rb') as f:
@@ -272,7 +272,12 @@ class RealTimeVolatilityPredictor:
                 'target_skewness': [0.0] * len(df),
                 'target_kurtosis': [3.0] * len(df)
             })
-            self.feature_engineer.fit_scalers(df, self.feature_cols, self.target_cols)
+            # Combine features and dummy targets for scaler fitting
+            df_with_targets = df.copy()
+            for col in self.target_cols:
+                df_with_targets[col] = dummy_targets[col]
+            
+            self.feature_engineer.fit_scalers(df_with_targets, self.feature_cols, self.target_cols)
             self.scalers_need_fitting = False
             print(f"✅ Scalers fitted successfully")
         
