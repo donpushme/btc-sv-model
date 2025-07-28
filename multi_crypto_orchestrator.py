@@ -85,27 +85,15 @@ class MultiCryptoOrchestrator:
         try:
             print(f"🔄 Starting {Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']} ({crypto_symbol}) predictor thread...")
             
-            # Check if model exists before starting (support both new and legacy naming)
-            import glob
+            # Check if model exists before starting
             import os
             
-            # Try new naming convention first
-            model_pattern = f"models/{crypto_symbol}_model_*.pth"
-            model_files = glob.glob(model_pattern)
+            # Look for model with simple naming convention
+            model_file = f"models/{crypto_symbol}_model.pth"
             
-            # If no new naming convention models found, try legacy naming
-            if not model_files:
-                legacy_patterns = [
-                    f"models/{crypto_symbol}_best_model.pth"
-                ]
-                for pattern in legacy_patterns:
-                    legacy_files = glob.glob(pattern)
-                    if legacy_files:
-                        model_files = legacy_files
-                        print(f"⚠️ Using legacy model naming convention for {crypto_symbol}")
-                        break
-            
-            if not model_files:
+            if os.path.exists(model_file):
+                print(f"✅ Found model for {crypto_symbol}: {model_file}")
+            else:
                 # Check if there's a generic best_model.pth
                 if os.path.exists("models/best_model.pth"):
                     raise Exception(f"No crypto-specific model found for {crypto_symbol}. "
@@ -114,8 +102,6 @@ class MultiCryptoOrchestrator:
                 else:
                     raise Exception(f"No trained model found for {crypto_symbol}. "
                                   f"Please train a model first using: python trainer.py {crypto_symbol}")
-            
-            print(f"✅ Found {len(model_files)} model(s) for {crypto_symbol}")
             
             # Initialize predictor for this crypto
             predictor = ContinuousCryptoPredictor(crypto_symbol=crypto_symbol)
@@ -317,30 +303,16 @@ def main():
         
         # Pre-flight check: Verify models exist
         print("\n🔍 Pre-flight check: Verifying trained models...")
-        import glob
         missing_models = []
         available_models = []
         
         for crypto_symbol in crypto_symbols:
-            # Try new naming convention first
-            model_pattern = f"models/{crypto_symbol}_model_*.pth"
-            model_files = glob.glob(model_pattern)
+            # Look for model with simple naming convention
+            model_file = f"models/{crypto_symbol}_model.pth"
             
-            # If no new naming convention models found, try legacy naming
-            if not model_files:
-                legacy_patterns = [
-                    f"models/{crypto_symbol}_best_model.pth"
-                ]
-                for pattern in legacy_patterns:
-                    legacy_files = glob.glob(pattern)
-                    if legacy_files:
-                        model_files = legacy_files
-                        print(f"  ⚠️ {crypto_symbol}: {len(model_files)} legacy model(s) found")
-                        break
-            
-            if model_files:
+            if os.path.exists(model_file):
                 available_models.append(crypto_symbol)
-                print(f"  ✅ {crypto_symbol}: {len(model_files)} model(s) found")
+                print(f"  ✅ {crypto_symbol}: Model found")
             else:
                 # Check if there's a generic best_model.pth
                 if os.path.exists("models/best_model.pth"):
@@ -348,7 +320,7 @@ def main():
                     print(f"     ⚠️ Found generic 'best_model.pth' (old single-BTC system)")
                     print(f"     💡 This model is not compatible with multi-crypto system")
                 else:
-                    print(f"  ❌ {crypto_symbol}: No models found")
+                    print(f"  ❌ {crypto_symbol}: No model found")
                 missing_models.append(crypto_symbol)
         
         if missing_models:

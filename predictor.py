@@ -154,8 +154,8 @@ class RealTimeVolatilityPredictor:
     
     def load_latest_model(self) -> None:
         """
-        Load the most recent trained model automatically for this cryptocurrency.
-        Uses the new naming convention: {crypto_symbol}_model_{timestamp}.pth
+        Load the trained model for this cryptocurrency.
+        Uses the simple naming convention: {crypto_symbol}_model.pth
         """
         print(f"🔍 Looking for models in: {self.config.MODEL_SAVE_PATH}")
         
@@ -166,22 +166,13 @@ class RealTimeVolatilityPredictor:
         all_files = os.listdir(self.config.MODEL_SAVE_PATH)
         print(f"📁 All files in models directory: {all_files}")
         
-        # Look for models with new naming convention for this specific crypto
-        model_files = [f for f in all_files 
-                      if f.startswith(f'{self.crypto_symbol}_model_') and f.endswith('.pth')]
+        # Look for model with simple naming convention for this specific crypto
+        model_file = f"{self.crypto_symbol}_model.pth"
+        model_path = os.path.join(self.config.MODEL_SAVE_PATH, model_file)
         
-        print(f"🔍 Found {len(model_files)} models for {self.crypto_symbol}: {model_files}")
-        
-        # If no crypto-specific models found, try legacy naming convention
-        if not model_files:
-            legacy_model_files = [f for f in all_files 
-                                if f.startswith(f'{self.crypto_symbol}_best_model.pth')]
-            if legacy_model_files:
-                model_files = legacy_model_files
-                print(f"⚠️ Using legacy model naming convention for {self.crypto_config['name']} ({self.crypto_symbol})")
-                print(f"📁 Legacy models found: {legacy_model_files}")
-        
-        if not model_files:
+        if os.path.exists(model_path):
+            print(f"✅ Found model for {self.crypto_symbol}: {model_file}")
+        else:
             # Check if there's a generic best_model.pth (old single-BTC system)
             if 'best_model.pth' in all_files:
                 print(f"⚠️ Found generic 'best_model.pth' but this is not crypto-specific")
@@ -190,28 +181,14 @@ class RealTimeVolatilityPredictor:
                 raise ValueError(f"No crypto-specific model found for {self.crypto_config['name']} ({self.crypto_symbol}). "
                                f"Found generic 'best_model.pth' which is not compatible with multi-crypto system.")
             else:
-                raise ValueError(f"No trained models found for {self.crypto_config['name']} ({self.crypto_symbol}). "
+                raise ValueError(f"No trained model found for {self.crypto_config['name']} ({self.crypto_symbol}). "
                                f"Please train a model first using: python trainer.py {self.crypto_symbol}")
         
-        # Sort by timestamp (newest first) for new naming convention, or use the first file for legacy naming convention
-        if model_files[0].startswith(f'{self.crypto_symbol}_model_'):
-            model_files.sort(reverse=True)
-            latest_model_file = model_files[0]
-            # Extract model version from filename
-            model_version = latest_model_file.replace(f'{self.crypto_symbol}_model_', '').replace('.pth', '')
-            print(f"📊 Using newest model: {latest_model_file} (version: {model_version})")
-        else:
-            latest_model_file = model_files[0]
-            model_version = "legacy"
-            print(f"📊 Using legacy model: {latest_model_file}")
-        
-        # Load the latest model
-        model_path = os.path.join(self.config.MODEL_SAVE_PATH, latest_model_file)
+        # Load the model
         print(f"🔍 Loading model from: {model_path}")
-        
         self.load_model(model_path)
         
-        print(f"✅ Loaded latest model for {self.crypto_config['name']} ({self.crypto_symbol}): {model_version}")
+        print(f"✅ Loaded model for {self.crypto_config['name']} ({self.crypto_symbol})")
     
     def preprocess_input_data(self, price_data: pd.DataFrame) -> pd.DataFrame:
         """

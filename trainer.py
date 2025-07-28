@@ -305,12 +305,11 @@ class CryptoVolatilityTrainer:
         # Create model directory if it doesn't exist
         os.makedirs(self.config.MODEL_SAVE_PATH, exist_ok=True)
         
-        # Generate timestamp for model version
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_version = f"{self.crypto_symbol}_{timestamp}{suffix}"
+        # Simple naming convention: one file per crypto type
+        model_version = f"{self.crypto_symbol}_model"
         
-        # Save model state
-        model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_model_{timestamp}{suffix}.pth")
+        # Save model state (overwrite existing file)
+        model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_model.pth")
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'config': self.config,
@@ -320,23 +319,24 @@ class CryptoVolatilityTrainer:
             'train_metrics': train_metrics,
             'val_metrics': val_metrics,
             'model_version': model_version,
-            'crypto_symbol': self.crypto_symbol
+            'crypto_symbol': self.crypto_symbol,
+            'last_updated': datetime.now().isoformat()
         }, model_path)
         
         print(f"Model saved to {model_path}")
         
-        # Save feature engineer state
-        feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer_{timestamp}{suffix}.pkl")
+        # Save feature engineer state (overwrite existing file)
+        feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer.pkl")
         with open(feature_engineer_path, 'wb') as f:
             pickle.dump(self.feature_engineer, f)
         
         print(f"Feature engineer saved to {feature_engineer_path}")
         
-        # Save model metadata
+        # Save model metadata (overwrite existing file)
         metadata = {
             'model_version': model_version,
             'crypto_symbol': self.crypto_symbol,
-            'timestamp': timestamp,
+            'last_updated': datetime.now().isoformat(),
             'epoch': epoch,
             'feature_cols': feature_cols,
             'target_cols': target_cols,
@@ -347,7 +347,7 @@ class CryptoVolatilityTrainer:
             'feature_engineer_path': feature_engineer_path
         }
         
-        metadata_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_metadata_{timestamp}{suffix}.json")
+        metadata_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_metadata.json")
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         
