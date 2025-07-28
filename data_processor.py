@@ -277,8 +277,8 @@ class CryptoDataProcessor:
         initial_rows = len(df)
         nan_counts = df.isna().sum()
         print(f"📊 NaN counts by column:")
-        for col, count in nan_counts[nan_counts > 0].items():
-            print(f"  {col}: {count} NaN values")
+        # for col, count in nan_counts[nan_counts > 0].items():
+        #     print(f"  {col}: {count} NaN values")
         
         # More aggressive NaN handling for limited data
         if initial_rows < 500:
