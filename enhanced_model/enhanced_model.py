@@ -215,7 +215,7 @@ class QuantileLoss(nn.Module):
     
     def __init__(self, quantiles: List[float] = [0.1, 0.25, 0.5, 0.75, 0.9]):
         super(QuantileLoss, self).__init__()
-        self.quantiles = torch.tensor(quantiles)
+        self.register_buffer('quantiles', torch.tensor(quantiles))
     
     def forward(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """
@@ -227,6 +227,9 @@ class QuantileLoss(nn.Module):
         """
         batch_size, num_quantiles, num_targets = predictions.size()
         
+        # Ensure quantiles tensor is on the same device as predictions
+        quantiles = self.quantiles.to(predictions.device)
+        
         # Expand targets for broadcasting
         targets_expanded = targets.unsqueeze(1).expand(-1, num_quantiles, -1)
         
@@ -234,8 +237,8 @@ class QuantileLoss(nn.Module):
         diff = targets_expanded - predictions
         loss = torch.where(
             diff >= 0,
-            self.quantiles.unsqueeze(0).unsqueeze(-1) * diff,
-            (self.quantiles.unsqueeze(0).unsqueeze(-1) - 1) * diff
+            quantiles.unsqueeze(0).unsqueeze(-1) * diff,
+            (quantiles.unsqueeze(0).unsqueeze(-1) - 1) * diff
         )
         
         return loss.mean()
