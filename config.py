@@ -97,6 +97,6 @@ class Config:
     TRAINING_DATA_RETENTION_DAYS = int(os.getenv('TRAINING_DATA_RETENTION_DAYS', '180'))
     PERFORMANCE_DATA_RETENTION_DAYS = int(os.getenv('PERFORMANCE_DATA_RETENTION_DAYS', '365'))
     
-    # Model versioning (read from environment)
-    AUTO_MODEL_VERSIONING = os.getenv('AUTO_MODEL_VERSIONING', 'true').lower() == 'true'
-    KEEP_MODEL_VERSIONS = int(os.getenv('KEEP_MODEL_VERSIONS', '5')) 
+    # Model versioning (read from environment) - Disabled to use simple naming
+    AUTO_MODEL_VERSIONING = os.getenv('AUTO_MODEL_VERSIONING', 'false').lower() == 'true'
+    KEEP_MODEL_VERSIONS = int(os.getenv('KEEP_MODEL_VERSIONS', '1')) 

@@ -121,7 +121,7 @@ class ContinuousCryptoPredictor:
         """Get current model version."""
         try:
             if hasattr(self.predictor, 'model') and self.predictor.model is not None:
-                return datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                return f"{self.crypto_symbol}_model"
             else:
                 return "unknown"
         except:
@@ -688,7 +688,7 @@ class ContinuousCryptoPredictor:
             if success:
                 # Update model version and reload predictor
                 old_version = self.current_model_version
-                self.current_model_version = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                self.current_model_version = f"{self.crypto_symbol}_model"
                 self.last_retrain_time = datetime.utcnow()
                 
                 # Reload the predictor with new model

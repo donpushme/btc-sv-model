@@ -299,7 +299,7 @@ class CryptoVolatilityTrainer:
         return training_history
     
     def save_model(self, epoch: int, train_metrics: Dict, val_metrics: Dict, 
-                  feature_cols: List[str], target_cols: List[str], suffix: str = "") -> None:
+                  feature_cols: List[str], target_cols: List[str]) -> None:
         """Save the trained model and metadata."""
         
         # Create model directory if it doesn't exist
@@ -357,7 +357,7 @@ class CryptoVolatilityTrainer:
         """
         Save training history to JSON.
         """
-        with open(os.path.join(self.config.RESULTS_PATH, 'training_history.json'), 'w') as f:
+        with open(os.path.join(self.config.RESULTS_PATH, f'{self.crypto_symbol}_training_history.json'), 'w') as f:
             json.dump(history, f, indent=2)
     
     def plot_training_history(self, history: Dict):
@@ -674,9 +674,8 @@ class CryptoVolatilityTrainer:
                 best_val_loss = val_metrics['total_loss']
                 patience_counter = 0
                 
-                # Save retrained model
-                self.save_model(epoch, train_metrics, val_metrics, feature_cols, target_cols, 
-                              suffix=f"_retrained_{days_back}days")
+                # Save retrained model (overwrites existing model)
+                self.save_model(epoch, train_metrics, val_metrics, feature_cols, target_cols)
             else:
                 patience_counter += 1
                 
@@ -686,12 +685,12 @@ class CryptoVolatilityTrainer:
         
         # Save retraining history
         retrain_history_path = os.path.join(self.config.RESULTS_PATH, 
-                                           f'retraining_history_{days_back}days.json')
+                                           f'{self.crypto_symbol}_retraining_history.json')
         with open(retrain_history_path, 'w') as f:
             json.dump(training_history, f, indent=2)
         
         print(f"✅ Retraining completed!")
-        print(f"📁 Retrained model saved with suffix '_retrained_{days_back}days'")
+        print(f"📁 Retrained model saved (overwrites existing model)")
         print(f"📊 Retraining history saved to {retrain_history_path}")
         
         return {

@@ -237,7 +237,7 @@ class DatabaseManager:
         """
         try:
             if model_version is None:
-                model_version = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                model_version = f"{self.crypto_symbol}_model"
             
             # Prepare document
             doc = {
