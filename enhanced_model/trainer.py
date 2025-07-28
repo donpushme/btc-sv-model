@@ -75,6 +75,18 @@ class EnhancedCryptoVolatilityTrainer:
         
         print(f"Enhanced dataset: {df.shape} | Features: {len(feature_cols)}")
         
+        # Adaptive sequence length for limited data
+        if len(df) < 200:
+            # Very limited data - use shorter sequence
+            adaptive_sequence_length = max(12, len(df) // 10)
+            print(f"⚠️ Limited data ({len(df)} rows). Using adaptive sequence length: {adaptive_sequence_length}")
+            self.config.SEQUENCE_LENGTH = adaptive_sequence_length
+        elif len(df) < 500:
+            # Limited data - use medium sequence
+            adaptive_sequence_length = max(48, len(df) // 8)
+            print(f"⚠️ Limited data ({len(df)} rows). Using adaptive sequence length: {adaptive_sequence_length}")
+            self.config.SEQUENCE_LENGTH = adaptive_sequence_length
+        
         # Update config with actual input size
         self.config.INPUT_SIZE = len(feature_cols)
         
