@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""
+Enhanced Predictor for Monte Carlo Simulation
+
+This module provides prediction capabilities for the enhanced model architecture
+specifically designed for Monte Carlo simulation with better statistical moment prediction.
+"""
+
+import torch
+import torch.nn as nn
+import numpy as np
+import pandas as pd
+from typing import Dict, List, Tuple, Optional
+import os
+import pickle
+import json
+from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
+
+from config import EnhancedConfig
+from enhanced_model import EnhancedVolatilityModel, create_enhanced_model
+from feature_engineering import EnhancedFeatureEngineer
+from data_processor import EnhancedCryptoDataProcessor
+
+class EnhancedRealTimeVolatilityPredictor:
+    """
+    Enhanced real-time volatility predictor for Monte Carlo simulation.
+    """
+    
+    def __init__(self, config: EnhancedConfig, crypto_symbol: str = 'BTC'):
+        self.config = config
+        self.crypto_symbol = crypto_symbol
+        self.crypto_config = EnhancedConfig.SUPPORTED_CRYPTOS[crypto_symbol]
+        self.device = config.DEVICE
+        self.model = None
+        self.feature_engineer = None
+        self.feature_cols = None
+        self.target_cols = None
+        self.is_loaded = False
+        
+        print(f"Enhanced predictor initialized for {self.crypto_config['name']} ({crypto_symbol})")
+    
+    def load_latest_model(self) -> bool:
+        """
+        Load the latest enhanced model.
+        
+        Returns:
+            True if model loaded successfully, False otherwise
+        """
+        try:
+            # Look for enhanced model
+            model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_model.pth")
+            feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_feature_engineer.pkl")
+            
+            if not os.path.exists(model_path):
+                print(f"Enhanced model not found: {model_path}")
+                return False
+            
+            if not os.path.exists(feature_engineer_path):
+                print(f"Enhanced feature engineer not found: {feature_engineer_path}")
+                return False
+            
+            # Load model
+            checkpoint = torch.load(model_path, map_location=self.device)
+            self.model = create_enhanced_model(self.config)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.model.to(self.device)
+            self.model.eval()
+            
+            # Load feature engineer
+            with open(feature_engineer_path, 'rb') as f:
+                self.feature_engineer = pickle.load(f)
+            
+            # Get feature and target columns
+            self.feature_cols = checkpoint['feature_cols']
+            self.target_cols = checkpoint['target_cols']
+            
+            self.is_loaded = True
+            print(f"✅ Enhanced model loaded successfully")
+            print(f"   Model epoch: {checkpoint['epoch']}")
+            print(f"   Features: {len(self.feature_cols)}")
+            print(f"   Targets: {len(self.target_cols)}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error loading enhanced model: {str(e)}")
+            return False
+    
+    def load_model(self, model_config: Dict) -> bool:
+        """
+        Load model with specific configuration.
+        
+        Args:
+            model_config: Model configuration dictionary
+            
+        Returns:
+            True if model loaded successfully, False otherwise
+        """
+        try:
+            # Create model with config
+            self.model = create_enhanced_model(self.config)
+            
+            # Load state dict if provided
+            if 'state_dict' in model_config:
+                self.model.load_state_dict(model_config['state_dict'])
+            
+            self.model.to(self.device)
+            self.model.eval()
+            
+            # Set feature columns
+            self.feature_cols = model_config.get('feature_cols', [])
+            self.target_cols = model_config.get('target_cols', ['target_volatility', 'target_skewness', 'target_kurtosis'])
+            
+            self.is_loaded = True
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error loading model with config: {str(e)}")
+            return False
+    
+    def predict_next_period(self, price_data: pd.DataFrame, current_price: float) -> Dict:
+        """
+        Predict volatility, skewness, and kurtosis for the next period.
+        
+        Args:
+            price_data: Historical OHLC data
+            current_price: Current price
+            
+        Returns:
+            Dictionary with predictions and uncertainty
+        """
+        if not self.is_loaded:
+            if not self.load_latest_model():
+                raise ValueError("Model not loaded. Please load a model first.")
+        
+        try:
+            # Preprocess data
+            processor = EnhancedCryptoDataProcessor("", self.crypto_symbol)
+            processor.df = price_data  # Use provided data
+            df = processor.preprocess_data(
+                return_windows=self.config.RETURN_WINDOWS,
+                prediction_horizon=self.config.PREDICTION_HORIZON
+            )
+            
+            # Add features
+            df = self.feature_engineer.engineer_features(df)
+            
+            # Remove NaN values
+            df = df.dropna().reset_index(drop=True)
+            
+            if len(df) < self.config.SEQUENCE_LENGTH:
+                raise ValueError(f"Insufficient data: {len(df)} < {self.config.SEQUENCE_LENGTH}")
+            
+            # Get the last sequence
+            last_sequence = df[self.feature_cols].iloc[-self.config.SEQUENCE_LENGTH:].values
+            
+            # Transform features
+            last_sequence_scaled = self.feature_engineer.feature_scaler.transform(last_sequence)
+            
+            # Prepare input tensor
+            X = torch.FloatTensor(last_sequence_scaled).unsqueeze(0).to(self.device)
+            
+            # Make prediction
+            with torch.no_grad():
+                predictions = self.model(X)
+            
+            # Extract point predictions
+            point_predictions = predictions['point_predictions'].cpu().numpy()[0]
+            uncertainty = predictions['uncertainty'].cpu().numpy()[0]
+            
+            # Inverse transform targets
+            targets_original = self.feature_engineer.inverse_transform_targets(point_predictions.reshape(1, -1))[0]
+            
+            # Apply bounds
+            volatility = np.clip(targets_original[0], 0.001, 0.1)
+            skewness = np.clip(targets_original[1], -2.0, 2.0)
+            kurtosis = np.clip(targets_original[2], -1.0, 10.0)
+            
+            # Assess risk level
+            risk_level = self._assess_risk_level(volatility, skewness, kurtosis)
+            
+            return {
+                'predicted_volatility': float(volatility),
+                'predicted_skewness': float(skewness),
+                'predicted_kurtosis': float(kurtosis),
+                'uncertainty_volatility': float(uncertainty[0]),
+                'uncertainty_skewness': float(uncertainty[1]),
+                'uncertainty_kurtosis': float(uncertainty[2]),
+                'current_price': current_price,
+                'prediction_time': datetime.now().isoformat(),
+                'risk_level': risk_level,
+                'model_type': 'enhanced'
+            }
+            
+        except Exception as e:
+            raise Exception(f"Prediction failed: {str(e)}")
+    
+    def predict_for_timestamp(self, price_data: pd.DataFrame, target_timestamp: datetime, 
+                            current_price: float) -> Dict:
+        """
+        Predict for a specific timestamp.
+        
+        Args:
+            price_data: Historical OHLC data
+            target_timestamp: Target timestamp for prediction
+            current_price: Current price
+            
+        Returns:
+            Dictionary with predictions
+        """
+        # Use the same logic as predict_next_period for now
+        # In a more sophisticated implementation, you could adjust for time-specific factors
+        return self.predict_next_period(price_data, current_price)
+    
+    def _assess_risk_level(self, volatility: float, skewness: float, kurtosis: float) -> str:
+        """
+        Assess risk level based on predicted moments.
+        
+        Args:
+            volatility: Predicted volatility
+            skewness: Predicted skewness
+            kurtosis: Predicted kurtosis
+            
+        Returns:
+            Risk level string
+        """
+        risk_score = 0
+        
+        # Volatility risk
+        if volatility > 0.05:
+            risk_score += 3
+        elif volatility > 0.03:
+            risk_score += 2
+        elif volatility > 0.02:
+            risk_score += 1
+        
+        # Skewness risk (negative skewness indicates higher downside risk)
+        if skewness < -1.0:
+            risk_score += 2
+        elif skewness < -0.5:
+            risk_score += 1
+        
+        # Kurtosis risk (high kurtosis indicates fat tails)
+        if kurtosis > 8:
+            risk_score += 3
+        elif kurtosis > 5:
+            risk_score += 2
+        elif kurtosis > 3:
+            risk_score += 1
+        
+        # Determine risk level
+        if risk_score >= 6:
+            return 'HIGH'
+        elif risk_score >= 3:
+            return 'MEDIUM'
+        else:
+            return 'LOW'
+    
+    def get_model_info(self) -> Dict:
+        """
+        Get information about the loaded model.
+        
+        Returns:
+            Dictionary with model information
+        """
+        if not self.is_loaded:
+            return {'error': 'Model not loaded'}
+        
+        return {
+            'crypto_symbol': self.crypto_symbol,
+            'model_type': 'enhanced',
+            'device': str(self.device),
+            'feature_count': len(self.feature_cols) if self.feature_cols else 0,
+            'target_count': len(self.target_cols) if self.target_cols else 0,
+            'sequence_length': self.config.SEQUENCE_LENGTH,
+            'prediction_horizon': self.config.PREDICTION_HORIZON
+        }
+
+def main():
+    """Example usage of the enhanced predictor."""
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: python predictor.py <crypto_symbol>")
+        print("Supported cryptos: BTC, ETH, XAU, SOL")
+        sys.exit(1)
+    
+    crypto_symbol = sys.argv[1].upper()
+    
+    if crypto_symbol not in EnhancedConfig.SUPPORTED_CRYPTOS:
+        print(f"Unsupported crypto: {crypto_symbol}")
+        print(f"Supported: {list(EnhancedConfig.SUPPORTED_CRYPTOS.keys())}")
+        sys.exit(1)
+    
+    # Initialize config and predictor
+    config = EnhancedConfig()
+    predictor = EnhancedRealTimeVolatilityPredictor(config, crypto_symbol)
+    
+    # Load model
+    if not predictor.load_latest_model():
+        print("❌ Failed to load model")
+        sys.exit(1)
+    
+    # Get model info
+    model_info = predictor.get_model_info()
+    print(f"📊 Model Info: {model_info}")
+    
+    # Example: Create sample data for prediction
+    print("\n🎯 Making sample prediction...")
+    
+    # Create sample OHLC data (you would use real data here)
+    dates = pd.date_range(start='2024-01-01', periods=200, freq='5T')
+    sample_data = pd.DataFrame({
+        'timestamp': dates,
+        'open': 45000 + np.random.randn(200) * 100,
+        'high': 45100 + np.random.randn(200) * 100,
+        'low': 44900 + np.random.randn(200) * 100,
+        'close': 45000 + np.random.randn(200) * 100,
+        'volume': 1000 + np.random.randn(200) * 100
+    })
+    
+    try:
+        # Make prediction
+        prediction = predictor.predict_next_period(sample_data, 45000.0)
+        
+        print(f"✅ Prediction successful!")
+        print(f"📈 Volatility: {prediction['predicted_volatility']:.6f}")
+        print(f"📊 Skewness: {prediction['predicted_skewness']:.6f}")
+        print(f"📉 Kurtosis: {prediction['predicted_kurtosis']:.6f}")
+        print(f"⚠️  Risk Level: {prediction['risk_level']}")
+        print(f"❓ Uncertainty: {prediction['uncertainty_volatility']:.6f}, {prediction['uncertainty_skewness']:.6f}, {prediction['uncertainty_kurtosis']:.6f}")
+        
+    except Exception as e:
+        print(f"❌ Prediction failed: {str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main() 
