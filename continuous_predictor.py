@@ -53,8 +53,6 @@ class ContinuousCryptoPredictor:
         self.crypto_config = Config.SUPPORTED_CRYPTOS[crypto_symbol]
         self.symbol = self.crypto_config['pyth_symbol']
         
-        print(f"🚀 Initializing Continuous {self.crypto_config['name']} Volatility Predictor...")
-        
         self.api_base_url = "https://benchmarks.pyth.network/v1/shims/tradingview/history"
         
         # Initialize base predictor for volatility predictions
@@ -69,7 +67,6 @@ class ContinuousCryptoPredictor:
         if self.enable_database:
             try:
                 self.db_manager = DatabaseManager(crypto_symbol=self.crypto_symbol)
-                print(f"✅ Database connection established for {self.crypto_config['name']}")
             except Exception as e:
                 print(f"⚠️ Database connection failed: {str(e)}")
                 self.enable_database = False
@@ -97,25 +94,12 @@ class ContinuousCryptoPredictor:
             try:
                 config = Config()
                 self.trainer = CryptoVolatilityTrainer(config, crypto_symbol=self.crypto_symbol)
-                print(f"✅ Training system initialized for {self.crypto_config['name']} continuous learning")
             except Exception as e:
                 print(f"⚠️ Training system initialization failed: {str(e)}")
                 self.enable_online_learning = False
         
         # Note: Signal handlers are managed by the orchestrator in multi-threaded mode
         # Individual predictors don't set up signal handlers to avoid thread conflicts
-        
-        print(f"✅ Continuous predictor initialized for {self.crypto_config['name']} ({crypto_symbol})")
-        print(f"📊 Symbol: {self.symbol}")
-        print(f"🌐 API: Pyth Network")
-        print(f"💾 Database: {'Enabled' if self.enable_database else 'Disabled'}")
-        print(f"🧠 Online learning: {'Enabled' if self.enable_online_learning else 'Disabled'}")
-        print(f"🔧 Model Version: {self.current_model_version}")
-        
-        if self.enable_online_learning:
-            print(f"🔄 Independent background retraining: ✅ ENABLED")
-        else:
-            print(f"⏸️  Independent background retraining: ❌ DISABLED")
     
     def _get_model_version(self) -> str:
         """Get current model version."""
@@ -126,8 +110,6 @@ class ContinuousCryptoPredictor:
                 return "unknown"
         except:
             return "unknown"
-    
-
     
     def fetch_crypto_data_from_api(self, hours_back: int = 120) -> pd.DataFrame:
         """
@@ -140,16 +122,12 @@ class ContinuousCryptoPredictor:
             DataFrame with cryptocurrency price data
         """
         try:
-            print(f"📡 Fetching {self.crypto_config['name']} data from Pyth Network API...")
-            
             # Calculate time range
             current_time = int(time.time())
             start_time = current_time - (hours_back * 3600)  # hours_back hours ago
             
             # Construct API URL
             url = f"{self.api_base_url}?symbol={self.symbol}&resolution=5&from={start_time}&to={current_time}"
-            
-            print(f"🔗 API URL: {url}")
             
             # Make API request
             response = requests.get(url, timeout=10)
@@ -189,10 +167,6 @@ class ContinuousCryptoPredictor:
             if len(df) == 0:
                 raise ValueError("No valid data after processing")
             
-            print(f"✅ Fetched {len(df)} data points from Pyth Network")
-            print(f"📊 Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
-            print(f"💰 Current price: ${df['close'].iloc[-1]:,.2f}")
-            
             return df
             
         except requests.exceptions.RequestException as e:
@@ -213,8 +187,6 @@ class ContinuousCryptoPredictor:
             Dict with current price information
         """
         try:
-            print(f"💰 Getting current {self.crypto_config['name']} price...")
-            
             current_time = int(time.time())
             # Get just the latest data point
             url = f"{self.api_base_url}?symbol={self.symbol}&resolution=1&from={current_time-300}&to={current_time}"
@@ -241,9 +213,6 @@ class ContinuousCryptoPredictor:
                 'low': float(latest_low),
                 'source': 'Pyth Network'
             }
-            
-            print(f"📈 Current {self.crypto_config['name']} Price: ${result['price']:,.2f}")
-            print(f"🕐 As of: {result['timestamp']}")
             
             return result
             
@@ -373,7 +342,6 @@ class ContinuousCryptoPredictor:
                 }
             }
             
-            print(f"✅ Generated {len(predictions)} predictions")
             return result
             
         except Exception as e:
@@ -520,11 +488,6 @@ class ContinuousCryptoPredictor:
         
         should_retrain = time_based or data_based
         
-        if should_retrain:
-            print(f"🧠 Retraining conditions met:")
-            print(f"   Time-based: {time_based} (interval: {self.retrain_interval_hours}h)")
-            print(f"   Data-based: {data_based} (min points: {self.min_new_data_points})")
-        
         return should_retrain
     
     def perform_retraining(self) -> bool:
@@ -540,7 +503,6 @@ class ContinuousCryptoPredictor:
         # Check if already retraining
         with self.retraining_lock:
             if self.is_retraining:
-                print("🧠 Retraining already in progress, skipping...")
                 return False
         
         # Trigger background retraining
@@ -552,8 +514,6 @@ class ContinuousCryptoPredictor:
         Background worker thread for model retraining.
         Runs independently without blocking prediction cycles.
         """
-        print("🧠 Background retraining worker started")
-        
         while self.is_running:
             try:
                 # Wait for retraining signal from queue
@@ -566,17 +526,12 @@ class ContinuousCryptoPredictor:
                 with self.retraining_lock:
                     self.is_retraining = True
                 
-                print("🧠 Background retraining worker: Starting retraining...")
-                
                 # Perform retraining
                 retrain_success = self._perform_retraining_internal()
                 
                 if retrain_success:
-                    print("✅ Background retraining worker: Retraining completed successfully")
                     # Signal model update
                     self.model_update_event.set()
-                else:
-                    print("⚠️ Background retraining worker: Retraining failed")
                 
                 # Clear retraining flag
                 with self.retraining_lock:
@@ -593,8 +548,6 @@ class ContinuousCryptoPredictor:
                 with self.retraining_lock:
                     self.is_retraining = False
                 self.retraining_queue.task_done()
-        
-        print("🧠 Background retraining worker stopped")
     
     def _perform_retraining_internal(self) -> bool:
         """
@@ -609,45 +562,26 @@ class ContinuousCryptoPredictor:
         try:
             start_time = datetime.utcnow()
             
-            # Check training data availability first
-            print("🔍 Checking training data availability...")
-            availability_info = self.db_manager.check_training_data_availability()
-            
             # Get recent training data with fallback to all data
-            print(f"📊 Retrieving training data for retraining...")
             training_data = self.db_manager.get_training_data_for_update(
                 hours=self.retrain_interval_hours * 2,  # Get extra data for better training
                 fallback_to_all=True  # Fallback to all available data if recent data is insufficient
             )
             
-            print(f"📊 Retrieved {len(training_data)} training data points")
-            
             if len(training_data) == 0:
                 print("❌ No training data available for retraining")
                 return False
-            
-            # Debug: Show data structure
-            print(f"📊 Training data columns: {list(training_data.columns)}")
-            print(f"📊 Training data sample:")
-            print(training_data.head())
-            print(f"📊 Training data info:")
-            print(training_data.info())
             
             # More flexible data requirements for retraining
             min_data_points = max(20, self.min_new_data_points // 4)  # Much lower threshold for retraining
             
             if len(training_data) < min_data_points:
                 print(f"⚠️ Limited training data: {len(training_data)} < {min_data_points}")
-                print("💡 Will attempt retraining with available data")
             
             # Additional check for minimum data requirements - reduced from 50 to 20
             if len(training_data) < 20:
                 print(f"⚠️ Very limited training data: {len(training_data)} < 20 minimum for retraining")
-                print("💡 This might cause training issues. Consider collecting more data first.")
                 return False
-            
-            print(f"📊 Background retraining with {len(training_data)} data points")
-            print(f"📊 Data date range: {training_data['timestamp'].min()} to {training_data['timestamp'].max()}")
             
             # Save training data to temporary CSV for trainer
             import tempfile
@@ -658,9 +592,6 @@ class ContinuousCryptoPredictor:
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
                     temp_csv = f.name
                     training_data.to_csv(temp_csv, index=False)
-                
-                print(f"💾 Saved training data to temporary file: {temp_csv}")
-                print(f"💾 File size: {temp_os.path.getsize(temp_csv)} bytes")
                 
                 # Use more flexible retraining parameters
                 # If we have limited data, use all available data instead of just 30 days
@@ -687,25 +618,20 @@ class ContinuousCryptoPredictor:
                 # Reload the predictor with new model
                 try:
                     self.predictor = RealTimeVolatilityPredictor(crypto_symbol=self.crypto_symbol)
-                    print(f"✅ Background retraining completed!")
-                    print(f"   Old version: {old_version}")
-                    print(f"   New version: {self.current_model_version}")
-                    print(f"   Training time: {(datetime.utcnow() - start_time).total_seconds():.1f}s")
+                    print(f"✅ Retraining completed! Model updated.")
                     return True
                 except Exception as e:
                     print(f"⚠️ Failed to reload predictor: {str(e)}")
                     return False
             else:
                 if training_results and 'error' in training_results:
-                    print(f"❌ Background retraining failed: {training_results['error']}")
-                    print(f"💡 Error details: {training_results}")
+                    print(f"❌ Retraining failed: {training_results['error']}")
                 else:
-                    print(f"❌ Background retraining failed")
-                    print(f"💡 Training results: {training_results}")
+                    print(f"❌ Retraining failed")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error during background retraining: {str(e)}")
+            print(f"❌ Error during retraining: {str(e)}")
             return False
     
     def _start_background_retraining_thread(self):
@@ -720,7 +646,6 @@ class ContinuousCryptoPredictor:
                 daemon=True
             )
             self.retraining_thread.start()
-            print("✅ Background retraining thread started")
         except Exception as e:
             print(f"❌ Failed to start background retraining thread: {str(e)}")
     
@@ -732,10 +657,6 @@ class ContinuousCryptoPredictor:
                 self.retraining_queue.put("STOP")
                 # Wait for thread to finish (with timeout)
                 self.retraining_thread.join(timeout=30)
-                if self.retraining_thread.is_alive():
-                    print("⚠️ Background retraining thread did not stop gracefully")
-                else:
-                    print("✅ Background retraining thread stopped")
             except Exception as e:
                 print(f"⚠️ Error stopping background retraining thread: {str(e)}")
     
@@ -749,15 +670,13 @@ class ContinuousCryptoPredictor:
         # Check if already retraining
         with self.retraining_lock:
             if self.is_retraining:
-                print("🧠 Retraining already in progress, skipping...")
                 return
         
         # Send retraining request to background thread
         try:
             self.retraining_queue.put("RETRAIN", timeout=1)
-            print("🧠 Background retraining triggered")
         except queue.Full:
-            print("⚠️ Retraining queue is full, skipping retraining request")
+            pass
     
     def _check_model_update(self):
         """
@@ -765,7 +684,6 @@ class ContinuousCryptoPredictor:
         """
         if self.model_update_event.is_set():
             self.model_update_event.clear()
-            print("🔄 Model updated by background retraining")
             return True
         return False
     
@@ -853,8 +771,6 @@ class ContinuousCryptoPredictor:
                     print(f"⚠️ Cycle failed, retrying in {interval_minutes} minutes...")
                 
                 # Sleep until next cycle
-                print(f"😴 Sleeping for {interval_minutes} minutes until next cycle...")
-                
                 # Sleep in small intervals to allow for graceful shutdown
                 sleep_seconds = interval_minutes * 60
                 for _ in range(sleep_seconds):
@@ -883,22 +799,11 @@ class ContinuousCryptoPredictor:
         if self.db_manager:
             try:
                 self.db_manager.close()
-                print("✅ Database connection closed")
             except:
                 pass
         
         # Final statistics
-        print(f"\n📊 === Final Statistics ===")
-        print(f"   Total cycles completed: {self.prediction_cycles}")
-        print(f"   Total predictions made: {self.total_predictions_made:,}")
-        if self.enable_online_learning:
-            if self.last_retrain_time:
-                print(f"   Last model retrain: {self.last_retrain_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-                print(f"   Final model version: {self.current_model_version}")
-            else:
-                print(f"   Model retraining: Not performed during session")
-        print(f"   Session end time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print(f"✅ Continuous prediction stopped")
+        print(f"\n📊 Final Stats: {self.prediction_cycles} cycles, {self.total_predictions_made:,} predictions")
 
 
 def main():
@@ -921,7 +826,6 @@ def main():
     
     print("🚀 Multi-Crypto Volatility - Continuous Prediction Mode")
     print(f"🎯 Target: {crypto_config['name']} ({crypto_symbol})")
-    print("=" * 50)
     
     try:
         # Initialize continuous predictor
@@ -934,12 +838,6 @@ def main():
         print("\n🛑 Interrupted by user")
     except Exception as e:
         print(f"\n❌ Error: {str(e)}")
-        print("\n💡 Troubleshooting:")
-        print("   1. Ensure MongoDB is running (if using database features)")
-        print("   2. Check internet connection for Pyth Network API access")
-        print("   3. Verify model is trained (run trainer.py first)")
-        print("   4. Install dependencies: pip install -r requirements.txt")
-        print("   5. Check Pyth Network API status if data fetching fails")
     finally:
         print("\n🔚 Continuous predictor terminated")
 

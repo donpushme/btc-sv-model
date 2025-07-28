@@ -60,18 +60,13 @@ class MultiCryptoOrchestrator:
             'errors': []
         }
         
-        print(f"🚀 Initializing Multi-Crypto Orchestrator...")
-        print(f"📊 Supported cryptocurrencies: {', '.join(self.crypto_symbols)}")
-        
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
-        
-        print("✅ Multi-Crypto Orchestrator initialized")
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
-        print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+        print(f"\n🛑 Shutting down...")
         self.stop()
         sys.exit(0)
     
@@ -83,17 +78,13 @@ class MultiCryptoOrchestrator:
             crypto_symbol: Cryptocurrency symbol to run
         """
         try:
-            print(f"🔄 Starting {Config.SUPPORTED_CRYPTOS[crypto_symbol]['name']} ({crypto_symbol}) predictor thread...")
-            
             # Check if model exists before starting
             import os
             
             # Look for model with simple naming convention
             model_file = f"models/{crypto_symbol}_model.pth"
             
-            if os.path.exists(model_file):
-                print(f"✅ Found model for {crypto_symbol}: {model_file}")
-            else:
+            if not os.path.exists(model_file):
                 # Check if there's a generic best_model.pth
                 if os.path.exists("models/best_model.pth"):
                     raise Exception(f"No crypto-specific model found for {crypto_symbol}. "
@@ -154,8 +145,6 @@ class MultiCryptoOrchestrator:
             # Small delay between thread starts to avoid overwhelming the system
             time.sleep(2)
         
-        print(f"✅ All {len(self.crypto_symbols)} cryptocurrency predictors started")
-        
         # Monitor threads
         try:
             while self.is_running and not self.stop_event.is_set():
@@ -164,7 +153,7 @@ class MultiCryptoOrchestrator:
                 for crypto_symbol, thread in self.threads.items():
                     if not thread.is_alive():
                         dead_threads.append(crypto_symbol)
-                        print(f"⚠️ Thread for {crypto_symbol} has died, restarting...")
+                        print(f"⚠️ Restarting {crypto_symbol} thread...")
                 
                 # Restart dead threads
                 for crypto_symbol in dead_threads:
@@ -186,7 +175,6 @@ class MultiCryptoOrchestrator:
                         )
                         self.threads[crypto_symbol] = thread
                         thread.start()
-                        print(f"✅ Restarted thread for {crypto_symbol}")
                 
                 # Update statistics
                 self._update_stats()
@@ -213,8 +201,8 @@ class MultiCryptoOrchestrator:
             self.stats['total_cycles'] = total_cycles
             self.stats['total_predictions'] = total_predictions
             
-            # Print status every 10 cycles (less frequent)
-            if self.stats['total_cycles'] % 20 == 0 and self.stats['total_cycles'] > 0:
+            # Print status every 50 cycles (less frequent)
+            if self.stats['total_cycles'] % 50 == 0 and self.stats['total_cycles'] > 0:
                 print(f"📊 Status: {len(self.predictors)}/{len(self.crypto_symbols)} active | "
                       f"Cycles: {total_cycles} | Predictions: {total_predictions:,}")
     
@@ -232,7 +220,6 @@ class MultiCryptoOrchestrator:
             if predictor:
                 try:
                     predictor.stop()
-                    print(f"✅ Stopped {crypto_symbol} predictor")
                 except Exception as e:
                     print(f"⚠️ Error stopping {crypto_symbol} predictor: {str(e)}")
         
@@ -245,18 +232,7 @@ class MultiCryptoOrchestrator:
         
         # Final statistics
         self._update_stats()
-        print(f"\n📊 === Final Multi-Crypto Statistics ===")
-        print(f"   Session duration: {datetime.utcnow() - self.stats['start_time']}")
-        print(f"   Total cycles completed: {self.stats['total_cycles']}")
-        print(f"   Total predictions made: {self.stats['total_predictions']:,}")
-        print(f"   Errors encountered: {len(self.stats['errors'])}")
-        
-        if self.stats['errors']:
-            print(f"   Recent errors:")
-            for error in self.stats['errors'][-5:]:  # Show last 5 errors
-                print(f"     {error['crypto_symbol']}: {error['error']}")
-        
-        print(f"✅ Multi-Crypto Orchestrator stopped")
+        print(f"\n📊 Final Stats: {self.stats['total_cycles']} cycles, {self.stats['total_predictions']:,} predictions, {len(self.stats['errors'])} errors")
     
     def get_status(self) -> Dict:
         """Get current status of all predictors."""
@@ -282,20 +258,16 @@ class MultiCryptoOrchestrator:
 def main():
     """Main function to run multi-crypto prediction."""
     print("🚀 Multi-Crypto Volatility - Orchestrated Continuous Prediction")
-    print("=" * 60)
     
     try:
         # Get crypto symbols from command line arguments or use all
         crypto_symbols = None
         if len(sys.argv) > 1:
             crypto_symbols = sys.argv[1:]
-            print(f"📊 Running for specified cryptocurrencies: {', '.join(crypto_symbols)}")
         else:
             crypto_symbols = list(Config.SUPPORTED_CRYPTOS.keys())
-            print(f"📊 Running for all supported cryptocurrencies: {', '.join(crypto_symbols)}")
         
         # Pre-flight check: Verify models exist
-        print("\n🔍 Pre-flight check: Verifying trained models...")
         missing_models = []
         available_models = []
         
@@ -305,23 +277,12 @@ def main():
             
             if os.path.exists(model_file):
                 available_models.append(crypto_symbol)
-                print(f"  ✅ {crypto_symbol}: Model found")
             else:
-                # Check if there's a generic best_model.pth
-                if os.path.exists("models/best_model.pth"):
-                    print(f"  ❌ {crypto_symbol}: No crypto-specific model found")
-                    print(f"     ⚠️ Found generic 'best_model.pth' (old single-BTC system)")
-                    print(f"     💡 This model is not compatible with multi-crypto system")
-                else:
-                    print(f"  ❌ {crypto_symbol}: No model found")
                 missing_models.append(crypto_symbol)
         
         if missing_models:
-            print(f"\n⚠️ Missing models for: {', '.join(missing_models)}")
-            print("💡 To train models, run:")
-            for crypto_symbol in missing_models:
-                print(f"   python trainer.py {crypto_symbol}")
-            print(f"\n🚀 Proceeding with available models: {', '.join(available_models)}")
+            print(f"⚠️ Missing models: {', '.join(missing_models)}")
+            print("💡 Train with: python trainer.py <symbol>")
             crypto_symbols = available_models
         
         if not crypto_symbols:
@@ -338,13 +299,6 @@ def main():
         print("\n🛑 Interrupted by user")
     except Exception as e:
         print(f"\n❌ Error: {str(e)}")
-        print("\n💡 Troubleshooting:")
-        print("   1. Ensure MongoDB is running (if using database features)")
-        print("   2. Check internet connection for Pyth Network API access")
-        print("   3. Verify models are trained for all cryptocurrencies")
-        print("   4. Install dependencies: pip install -r requirements.txt")
-        print("   5. Check Pyth Network API status if data fetching fails")
-        print("   6. Ensure sufficient system resources for multiple predictors")
     finally:
         print("\n🔚 Multi-Crypto Orchestrator terminated")
 
