@@ -79,7 +79,7 @@ def main():
     print("4. Test with: python continuous_predictor.py")
     
     print("\n💡 Expected Improvements:")
-    print("- Kurtosis predictions should be between -1 and +27 (excess kurtosis)")
+    print("- Kurtosis predictions should be between -1 and +10 (excess kurtosis)")
     print("- More stable training due to log transformation")
     print("- Better handling of outliers with RobustScaler")
     print("- No more extreme values like 83.18")

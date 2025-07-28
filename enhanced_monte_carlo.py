@@ -102,7 +102,7 @@ class EnhancedMonteCarloSimulator:
                 varied_value = base_value * multiplier + noise
                 
                 # Ensure reasonable bounds (excess kurtosis)
-                varied_value = max(min(varied_value, 27.0), -1.0)
+                varied_value = max(min(varied_value, 10.0), -1.0)
                 
             elif variation_type == 'skewness':
                 # Skewness can vary based on market sentiment

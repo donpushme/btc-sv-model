@@ -53,26 +53,35 @@ class EnhancedCryptoVolatilityTrainer:
     
     def prepare_data(self, csv_path: str) -> Tuple[DataLoader, DataLoader, List[str], List[str]]:
         """
-        Prepare training and validation data loaders.
+        Prepare data for training.
+        
+        Args:
+            csv_path: Path to the CSV file
+            
+        Returns:
+            Tuple of (train_loader, val_loader, feature_cols, target_cols)
         """
+        print(f"📁 Loading data from {csv_path}")
+        
         # Load and preprocess data
-        processor = EnhancedCryptoDataProcessor(csv_path, self.crypto_symbol)
-        df = processor.preprocess_data(
-            return_windows=self.config.RETURN_WINDOWS,
-            prediction_horizon=self.config.PREDICTION_HORIZON
-        )
+        data_processor = EnhancedCryptoDataProcessor(csv_path, self.crypto_symbol)
+        df = data_processor.preprocess_data()
+        print(f"✅ Data preprocessing complete. Shape: {df.shape}")
         
-        # Add additional features
+        # Engineer features
+        print("🔧 Engineering features...")
         df = self.feature_engineer.engineer_features(df)
+        print(f"✅ Feature engineering complete. Shape: {df.shape}")
         
-        # Remove any remaining NaN values
-        df = df.dropna().reset_index(drop=True)
+        # Show available columns for debugging
+        print(f"📋 Available columns: {list(df.columns)}")
         
-        # Get feature and target columns
-        feature_cols = [col for col in df.columns if col not in 
-                       ['timestamp', 'target_volatility', 'target_skewness', 'target_kurtosis']]
+        # Define feature and target columns
+        feature_cols = [col for col in df.columns if col.startswith(('rsi', 'macd', 'bb_', 'stoch_', 'williams_r', 'atr', 'realized_vol', 'parkinson_vol', 'garman_klass_vol', 'vol_of_vol', 'vwap', 'volume_ratio', 'price_efficiency', 'spread_proxy', 'tick_effect', 'vol_rsi_interaction', 'vol_macd_interaction', 'hour_vol_interaction', 'weekend_vol_interaction', 'volume_vol_interaction', 'hour', 'day_of_week', 'is_weekend', 'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'us_trading_hours', 'asian_trading_hours'))]
         target_cols = ['target_volatility', 'target_skewness', 'target_kurtosis']
         
+        print(f"🎯 Selected feature columns: {feature_cols}")
+        print(f"🎯 Target columns: {target_cols}")
         print(f"Enhanced dataset: {df.shape} | Features: {len(feature_cols)}")
         
         # Adaptive sequence length for limited data
@@ -89,26 +98,36 @@ class EnhancedCryptoVolatilityTrainer:
         
         # Update config with actual input size
         self.config.INPUT_SIZE = len(feature_cols)
+        print(f"📏 Updated config - INPUT_SIZE: {self.config.INPUT_SIZE}, SEQUENCE_LENGTH: {self.config.SEQUENCE_LENGTH}")
         
         # Fit scalers on training data
+        print("⚖️ Fitting scalers...")
         train_size = int(len(df) * (1 - self.config.VALIDATION_SPLIT))
         train_df = df.iloc[:train_size]
         self.feature_engineer.fit_scalers(train_df, feature_cols, target_cols)
+        print("✅ Scalers fitted")
         
         # Scale the data
+        print("🔄 Scaling data...")
         df_scaled = self.feature_engineer.transform_data(df, feature_cols, target_cols)
+        print("✅ Data scaled")
         
         # Prepare sequences
+        print("📦 Preparing sequences...")
         X, y = self.feature_engineer.prepare_sequences(
             df_scaled, feature_cols, target_cols, self.config.SEQUENCE_LENGTH
         )
+        print(f"✅ Sequences prepared. X shape: {X.shape}, y shape: {y.shape}")
         
         # Train/validation split
+        print("✂️ Creating train/validation split...")
         X_train, X_val, y_train, y_val = create_train_val_split(
             X, y, self.config.VALIDATION_SPLIT
         )
+        print(f"✅ Split complete. Train: {X_train.shape}, Val: {X_val.shape}")
         
         # Create datasets and data loaders
+        print("📚 Creating datasets and data loaders...")
         train_dataset = EnhancedCryptoDataset(X_train, y_train)
         val_dataset = EnhancedCryptoDataset(X_val, y_val)
         
@@ -126,6 +145,7 @@ class EnhancedCryptoVolatilityTrainer:
             num_workers=0
         )
         
+        print("✅ Data loaders created successfully")
         return train_loader, val_loader, feature_cols, target_cols
     
     def train_epoch(self, model: nn.Module, train_loader: DataLoader, 
@@ -141,15 +161,24 @@ class EnhancedCryptoVolatilityTrainer:
         total_quantile_loss = 0.0
         num_batches = 0
         
-        for batch_x, batch_y in train_loader:
+        print(f"🔄 Training epoch with {len(train_loader)} batches...")
+        
+        for batch_idx, (batch_x, batch_y) in enumerate(train_loader):
+            if batch_idx % 50 == 0:
+                print(f"  Processing batch {batch_idx}/{len(train_loader)}")
+            
             batch_x = batch_x.to(self.device)
             batch_y = batch_y.to(self.device)
             
             optimizer.zero_grad()
             
             # Forward pass
-            predictions = model(batch_x)
-            loss, loss_components = criterion(predictions, batch_y)
+            try:
+                predictions = model(batch_x)
+                loss, loss_components = criterion(predictions, batch_y)
+            except Exception as e:
+                print(f"❌ Error in forward pass at batch {batch_idx}: {e}")
+                raise
             
             # Backward pass
             loss.backward()
@@ -166,6 +195,8 @@ class EnhancedCryptoVolatilityTrainer:
             total_kurt_loss += loss_components['kurtosis_loss'].item()
             total_quantile_loss += loss_components['quantile_loss'].item()
             num_batches += 1
+        
+        print(f"✅ Training epoch complete. Processed {num_batches} batches")
         
         return {
             'total_loss': total_loss / num_batches,
@@ -188,14 +219,23 @@ class EnhancedCryptoVolatilityTrainer:
         total_quantile_loss = 0.0
         num_batches = 0
         
+        print(f"🔍 Validating epoch with {len(val_loader)} batches...")
+        
         with torch.no_grad():
-            for batch_x, batch_y in val_loader:
+            for batch_idx, (batch_x, batch_y) in enumerate(val_loader):
+                if batch_idx % 20 == 0:
+                    print(f"  Processing validation batch {batch_idx}/{len(val_loader)}")
+                
                 batch_x = batch_x.to(self.device)
                 batch_y = batch_y.to(self.device)
                 
                 # Forward pass
-                predictions = model(batch_x)
-                loss, loss_components = criterion(predictions, batch_y)
+                try:
+                    predictions = model(batch_x)
+                    loss, loss_components = criterion(predictions, batch_y)
+                except Exception as e:
+                    print(f"❌ Error in validation forward pass at batch {batch_idx}: {e}")
+                    raise
                 
                 # Accumulate losses
                 total_loss += loss.item()
@@ -204,6 +244,8 @@ class EnhancedCryptoVolatilityTrainer:
                 total_kurt_loss += loss_components['kurtosis_loss'].item()
                 total_quantile_loss += loss_components['quantile_loss'].item()
                 num_batches += 1
+        
+        print(f"✅ Validation epoch complete. Processed {num_batches} batches")
         
         return {
             'total_loss': total_loss / num_batches,
@@ -226,18 +268,26 @@ class EnhancedCryptoVolatilityTrainer:
         print(f"🚀 Starting enhanced training for {self.crypto_symbol}")
         
         # Prepare data
+        print("📊 Preparing data...")
         train_loader, val_loader, feature_cols, target_cols = self.prepare_data(csv_path)
+        print(f"✅ Data preparation complete. Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
         
         # Initialize model
+        print("🏗️ Initializing model...")
         self.model = create_enhanced_model(self.config)
+        print("✅ Model created successfully")
+        
         self.model.to(self.device)
+        print(f"✅ Model moved to device: {self.device}")
         
         # Initialize optimizer and criterion
+        print("⚙️ Initializing optimizer and criterion...")
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.LEARNING_RATE)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.5, patience=5, verbose=True
         )
         criterion = EnhancedVolatilityLoss()
+        print("✅ Optimizer and criterion initialized")
         
         # Training history
         history = {
@@ -254,9 +304,12 @@ class EnhancedCryptoVolatilityTrainer:
         }
         
         print(f"📊 Training on {len(train_loader.dataset)} samples, validating on {len(val_loader.dataset)} samples")
+        print(f"🔄 Starting training loop for {self.config.NUM_EPOCHS} epochs...")
         
         # Training loop
         for epoch in range(self.config.NUM_EPOCHS):
+            print(f"📈 Starting epoch {epoch+1}/{self.config.NUM_EPOCHS}")
+            
             # Train
             train_metrics = self.train_epoch(self.model, train_loader, optimizer, criterion)
             

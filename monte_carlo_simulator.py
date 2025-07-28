@@ -43,7 +43,7 @@ class MonteCarloSimulator:
             size: (num_simulations, num_intervals)
             volatility: Predicted volatility (0.001 to 0.1 scale)
             skewness: Predicted skewness (-2 to +2 scale)
-            kurtosis: Predicted excess kurtosis (-1 to +27 scale)
+            kurtosis: Predicted excess kurtosis (-1 to +10 scale)
             dt: Time step (1/288 for 5-minute intervals)
             
         Returns:
@@ -110,8 +110,8 @@ class MonteCarloSimulator:
                 print(f"Warning: Volatility {vol:.6f} at interval {i} outside bounds [0.001, 0.1]")
             if not (-2.0 <= skew <= 2.0):
                 print(f"Warning: Skewness {skew:.6f} at interval {i} outside bounds [-2.0, 2.0]")
-            if not (-1.0 <= kurt <= 27.0):
-                print(f"Warning: Kurtosis {kurt:.6f} at interval {i} outside bounds [-1.0, 27.0]")
+            if not (-1.0 <= kurt <= 10.0):
+                print(f"Warning: Kurtosis {kurt:.6f} at interval {i} outside bounds [-1.0, 10.0]")
         
         # Generate price paths with time-varying parameters
         price_paths = np.zeros((num_simulations, intervals + 1))

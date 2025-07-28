@@ -1034,7 +1034,7 @@ def validate_prediction_bounds(predictions: List[Dict]) -> Dict:
         # Check bounds
         vol_valid = 0.001 <= vol <= 0.1
         skew_valid = -2.0 <= skew <= 2.0
-        kurt_valid = -1.0 <= kurt <= 27.0
+        kurt_valid = -1.0 <= kurt <= 10.0
         
         if vol_valid:
             validation['volatility_valid'] += 1
