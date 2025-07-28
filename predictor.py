@@ -295,7 +295,7 @@ class RealTimeVolatilityPredictor:
                 'target_skewness': [0.0] * len(df),
                 'target_kurtosis': [3.0] * len(df)
             })
-            self.feature_engineer.fit_scalers(df[self.feature_cols], dummy_targets)
+            self.feature_engineer.fit_scalers(df, self.feature_cols, self.target_cols)
             self.scalers_need_fitting = False
             print(f"✅ Scalers fitted successfully")
         
