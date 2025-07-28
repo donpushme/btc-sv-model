@@ -795,8 +795,8 @@ class ContinuousCryptoPredictor:
             stats = prediction_result['summary_stats']
             print(f"⏰ {datetime.utcnow().strftime('%H:%M:%S')} | "
                   f"${prediction_result['current_price']:,.0f} | "
-                  f"Vol: {stats['mean_volatility']:.4f} | "
-                  f"Range: {stats['min_volatility']:.4f}-{stats['max_volatility']:.4f}")
+                  f"Vol: {stats['volatility']['mean']:.4f} | "
+                  f"Range: {stats['volatility']['min']:.4f}-{stats['volatility']['max']:.4f}")
             
             # Show retraining status only if relevant
             if self.enable_online_learning:
