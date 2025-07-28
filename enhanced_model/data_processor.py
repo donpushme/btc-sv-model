@@ -73,17 +73,22 @@ class EnhancedCryptoDataProcessor:
         Returns:
             DataFrame with return columns added
         """
-        # Log returns
+        # Calculate returns (same as original)
+        df['return'] = df['close'].pct_change()
         df['log_return'] = np.log(df['close'] / df['close'].shift(1))
         
-        # Simple returns
-        df['simple_return'] = (df['close'] - df['close'].shift(1)) / df['close'].shift(1)
+        # Calculate price range and volatility proxy
+        df['price_range'] = (df['high'] - df['low']) / df['open']
+        df['true_range'] = np.maximum(
+            df['high'] - df['low'],
+            np.maximum(
+                abs(df['high'] - df['close'].shift(1)),
+                abs(df['low'] - df['close'].shift(1))
+            )
+        )
         
-        # High-Low range
-        df['hl_range'] = (df['high'] - df['low']) / df['close'].shift(1)
-        
-        # Open-Close range
-        df['oc_range'] = (df['close'] - df['open']) / df['open']
+        # Volume proxy (using price range as we don't have volume data)
+        df['volume_proxy'] = df['true_range'] * df['close']
         
         return df
     
@@ -99,26 +104,23 @@ class EnhancedCryptoDataProcessor:
             DataFrame with rolling statistics
         """
         for window in windows:
-            if len(df) < window:
-                continue
-                
+            # Ensure window is at least 4 for kurtosis calculation
+            min_window = max(4, window)
+            
             # Rolling volatility (standard deviation of returns)
-            df[f'volatility_{window}'] = df['log_return'].rolling(window=window).std()
+            df[f'volatility_{window}'] = df['return'].rolling(window=window).std()
             
-            # Rolling mean return
-            df[f'mean_return_{window}'] = df['log_return'].rolling(window=window).mean()
-            
-            # Rolling skewness
+            # Rolling skewness (needs at least 3 points)
             if window >= 3:
-                df[f'skewness_{window}'] = df['log_return'].rolling(window=window).skew()
+                df[f'skewness_{window}'] = df['return'].rolling(window=window).skew()
             else:
-                df[f'skewness_{window}'] = 0.0
+                df[f'skewness_{window}'] = 0.0  # Default to no skew for very small windows
             
-            # Rolling kurtosis (excess kurtosis)
+            # Rolling kurtosis (needs at least 4 points)
             if window >= 4:
-                df[f'kurtosis_{window}'] = df['log_return'].rolling(window=window).kurt()
+                df[f'kurtosis_{window}'] = df['return'].rolling(window=window).kurt()
             else:
-                df[f'kurtosis_{window}'] = 0.0
+                df[f'kurtosis_{window}'] = 0.0  # Default to normal kurtosis for very small windows
             
             # Rolling momentum
             if window >= 2:
@@ -130,54 +132,92 @@ class EnhancedCryptoDataProcessor:
     
     def calculate_target_statistics(self, df: pd.DataFrame, prediction_horizon: int = 288) -> pd.DataFrame:
         """
-        Calculate target statistics for future periods.
-        
-        Args:
-            df: DataFrame with return data
-            prediction_horizon: Number of periods to predict ahead
-            
-        Returns:
-            DataFrame with target columns
+        Calculate future volatility, skewness, and kurtosis as targets.
+        prediction_horizon: number of future periods to calculate statistics for
         """
-        # Calculate future returns for the prediction horizon
-        future_returns = df['log_return'].shift(-prediction_horizon).rolling(window=prediction_horizon).apply(
-            lambda x: x.dropna().tolist() if len(x.dropna()) >= prediction_horizon // 2 else np.nan
-        )
+        print(f"Calculating target statistics with prediction_horizon={prediction_horizon}")
         
-        # Calculate target statistics
-        df['target_volatility'] = future_returns.apply(
-            lambda x: np.std(x) if isinstance(x, list) and len(x) >= prediction_horizon // 2 else np.nan
-        )
+        # Initialize target columns
+        df['target_volatility'] = np.nan
+        df['target_skewness'] = np.nan
+        df['target_kurtosis'] = np.nan
         
-        df['target_skewness'] = future_returns.apply(
-            lambda x: float(pd.Series(x).skew()) if isinstance(x, list) and len(x) >= 3 else np.nan
-        )
+        # For limited data, use a much shorter prediction horizon
+        available_data = len(df)
+        if available_data < prediction_horizon * 2:
+            # If we have very limited data, use a much shorter horizon
+            adaptive_horizon = max(6, min(available_data // 4, 24))  # Between 6 and 24 periods
+            print(f"⚠️ Limited data ({available_data} points). Using adaptive prediction horizon: {adaptive_horizon}")
+            prediction_horizon = adaptive_horizon
         
-        df['target_kurtosis'] = future_returns.apply(
-            lambda x: float(pd.Series(x).kurt()) if isinstance(x, list) and len(x) >= 4 else np.nan
-        )
+        # Calculate targets for each time point
+        # Use a more conservative approach for limited data
+        max_start_idx = len(df) - prediction_horizon
         
-        # Ensure all target columns are numeric before applying bounds
-        df['target_volatility'] = pd.to_numeric(df['target_volatility'], errors='coerce')
-        df['target_skewness'] = pd.to_numeric(df['target_skewness'], errors='coerce')
-        df['target_kurtosis'] = pd.to_numeric(df['target_kurtosis'], errors='coerce')
+        if max_start_idx <= 0:
+            print(f"⚠️ Data too short for prediction horizon. Using all available data for targets.")
+            # If data is too short, use all available data for each target
+            for i in range(len(df)):
+                if i < len(df) - 6:  # Need at least 6 points for statistics
+                    future_returns = df['return'].iloc[i+1:].dropna()
+                    if len(future_returns) >= 6:
+                        volatility = future_returns.std()
+                        skewness = future_returns.skew()
+                        kurtosis = future_returns.kurt()
+                        
+                        if not pd.isna(volatility) and not pd.isna(skewness) and not pd.isna(kurtosis):
+                            # Apply bounds to kurtosis
+                            absolute_kurtosis = kurtosis + 3
+                            absolute_kurtosis = max(min(absolute_kurtosis, 15.0), 3.0)
+                            excess_kurtosis = absolute_kurtosis - 3
+                            
+                            df.loc[i, 'target_volatility'] = volatility
+                            df.loc[i, 'target_skewness'] = skewness
+                            df.loc[i, 'target_kurtosis'] = excess_kurtosis
+        else:
+            # Normal case: calculate targets for each time point
+            for i in range(max_start_idx):
+                future_returns = df['return'].iloc[i+1:i+1+prediction_horizon]
+                
+                # More lenient tolerance for limited data
+                min_required = max(6, prediction_horizon // 3)  # At least 6 periods or 33% of horizon
+                
+                if len(future_returns) >= min_required:
+                    # Remove any NaN values from future returns
+                    future_returns = future_returns.dropna()
+                    
+                    if len(future_returns) >= min_required:
+                        volatility = future_returns.std()
+                        skewness = future_returns.skew()
+                        kurtosis = future_returns.kurt()  # This is excess kurtosis
+                        
+                        # Handle NaN values in statistics
+                        if pd.isna(volatility) or pd.isna(skewness) or pd.isna(kurtosis):
+                            continue
+                        
+                        # Convert excess kurtosis to absolute kurtosis and apply bounds
+                        absolute_kurtosis = kurtosis + 3  # Convert to absolute kurtosis
+                        
+                        # Apply reasonable bounds for kurtosis (3 to 15)
+                        # Normal distribution has kurtosis = 3, extreme values capped at 15 (more reasonable)
+                        absolute_kurtosis = max(min(absolute_kurtosis, 15.0), 3.0)
+                        
+                        # Convert back to excess kurtosis for consistency
+                        excess_kurtosis = absolute_kurtosis - 3
+                        
+                        df.loc[i, 'target_volatility'] = volatility
+                        df.loc[i, 'target_skewness'] = skewness
+                        df.loc[i, 'target_kurtosis'] = excess_kurtosis
         
-        # Convert kurtosis from excess to absolute, apply bounds, then back to excess
-        # This ensures realistic kurtosis values for Monte Carlo simulation
-        df['target_kurtosis'] = df['target_kurtosis'].apply(
-            lambda x: np.clip(x + 3, 3.0, 15.0) - 3 if pd.notna(x) else np.nan
-        )
+        # Fill NaN targets with reasonable defaults
+        df['target_volatility'] = df['target_volatility'].fillna(0.02)  # 2% volatility
+        df['target_skewness'] = df['target_skewness'].fillna(0.0)  # No skew
+        df['target_kurtosis'] = df['target_kurtosis'].fillna(0.0)  # Normal kurtosis
         
-        # Apply bounds to skewness
-        df['target_skewness'] = df['target_skewness'].clip(-2.0, 2.0)
-        
-        # Apply bounds to volatility
-        df['target_volatility'] = df['target_volatility'].clip(0.001, 0.1)
-        
-        # Fill NaN values with reasonable defaults
-        df['target_volatility'].fillna(0.02, inplace=True)
-        df['target_skewness'].fillna(0.0, inplace=True)
-        df['target_kurtosis'].fillna(0.0, inplace=True)
+        print(f"Target statistics calculated. Sample values:")
+        print(f"  Volatility sample: {df['target_volatility'].dropna().head(3).tolist()}")
+        print(f"  Skewness sample: {df['target_skewness'].dropna().head(3).tolist()}")
+        print(f"  Kurtosis sample: {df['target_kurtosis'].dropna().head(3).tolist()}")
         
         return df
     
@@ -219,28 +259,26 @@ class EnhancedCryptoDataProcessor:
     def preprocess_data(self, return_windows: List[int] = [6, 12, 24, 48], 
                        prediction_horizon: int = 288) -> pd.DataFrame:
         """
-        Complete data preprocessing pipeline.
-        
-        Args:
-            return_windows: Windows for rolling statistics
-            prediction_horizon: Number of periods to predict ahead
-            
-        Returns:
-            Preprocessed DataFrame ready for training
+        Complete preprocessing pipeline with enhanced robustness for limited data.
         """
-        # Load data
+        print("Loading data...")
         df = self.load_data()
         
-        # Calculate returns
+        print("Calculating returns...")
         df = self.calculate_returns(df)
         
-        # Add time features
+        # Handle NaN values in returns more aggressively
+        initial_rows = len(df)
+        df['return'] = df['return'].fillna(method='ffill').fillna(method='bfill').fillna(0)
+        df['log_return'] = df['log_return'].fillna(method='ffill').fillna(method='bfill').fillna(0)
+        
+        print("Adding time features...")
         df = self.add_time_features(df)
         
-        # Calculate rolling statistics
+        print("Calculating rolling statistics...")
         df = self.calculate_rolling_statistics(df, return_windows)
         
-        # Calculate target statistics
+        print("Calculating target statistics...")
         df = self.calculate_target_statistics(df, prediction_horizon)
         
         # Handle NaN values aggressively for limited data
@@ -251,5 +289,8 @@ class EnhancedCryptoDataProcessor:
         else:
             # For larger datasets, use standard NaN handling
             df = df.fillna(method='ffill').fillna(method='bfill')
+        
+        final_rows = len(df)
+        print(f"Preprocessing complete. Initial rows: {initial_rows}, Final rows: {final_rows}")
         
         return df 
