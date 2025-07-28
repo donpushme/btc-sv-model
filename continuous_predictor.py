@@ -234,7 +234,7 @@ class ContinuousCryptoPredictor:
     
     def generate_288_predictions(self, price_data: pd.DataFrame) -> Dict:
         """
-        Generate 288 volatility predictions for the next 24 hours.
+        Generate 288 volatility predictions for the next 24 hours with varying kurtosis and skewness.
         
         Args:
             price_data: Historical price data
@@ -243,40 +243,83 @@ class ContinuousCryptoPredictor:
             Dict with all 288 predictions
         """
         try:
-            # Get base prediction
+            # Get base prediction for reference
             base_prediction = self.predict_and_save(price_data, save_to_db=False)
             
             # Generate time points for next 24 hours (288 × 5-minute intervals)
             start_time = pd.to_datetime(price_data['timestamp'].iloc[-1])
             predictions = []
             
+            # Get base values for time-varying patterns
+            base_volatility = base_prediction['predicted_volatility']
+            base_skewness = base_prediction['predicted_skewness']
+            base_kurtosis = base_prediction['predicted_kurtosis']
+            
             for i in range(288):  # 288 = 24 hours × 12 intervals per hour
                 future_time = start_time + timedelta(minutes=5 * (i + 1))
                 hour_utc = future_time.hour
                 
-                # Calculate volatility multiplier based on time patterns
+                # Create rolling window for this time point prediction
+                # Use different window sizes to simulate forward-looking predictions
+                window_offset = min(i, 72)  # Max 6 hours offset for rolling window
+                rolling_data = price_data.iloc[-(144 + window_offset):-window_offset] if window_offset > 0 else price_data
+                
+                # Make individual prediction for this time point
+                try:
+                    individual_prediction = self.predictor.predict_next_period(rolling_data)
+                    predicted_volatility = individual_prediction['predicted_volatility']
+                    predicted_skewness = individual_prediction['predicted_skewness']
+                    predicted_kurtosis = individual_prediction['predicted_kurtosis']
+                except Exception as e:
+                    # Fallback to base prediction if individual prediction fails
+                    predicted_volatility = base_volatility
+                    predicted_skewness = base_skewness
+                    predicted_kurtosis = base_kurtosis
+                
+                # Calculate time-varying multipliers based on market patterns
                 # US trading hours (14:30-21:00 UTC = 9:30 AM-4:00 PM EST)
                 if 14 <= hour_utc <= 21:
-                    base_multiplier = 1.3  # Higher volatility during US market hours
+                    vol_multiplier = 1.3  # Higher volatility during US market hours
+                    skew_multiplier = 1.2  # More pronounced skewness during active trading
+                    kurt_multiplier = 1.4  # Higher kurtosis (fat tails) during active hours
                 elif 22 <= hour_utc <= 2:  # Late US/early Asian
-                    base_multiplier = 1.1
+                    vol_multiplier = 1.1
+                    skew_multiplier = 1.1
+                    kurt_multiplier = 1.2
                 elif 3 <= hour_utc <= 9:  # Asian trading hours
-                    base_multiplier = 0.9
+                    vol_multiplier = 0.9
+                    skew_multiplier = 0.9
+                    kurt_multiplier = 0.8
                 else:  # Low activity hours
-                    base_multiplier = 0.7
+                    vol_multiplier = 0.7
+                    skew_multiplier = 0.8
+                    kurt_multiplier = 0.6
                 
                 # Weekend effect
                 if future_time.weekday() >= 5:  # Saturday, Sunday
-                    base_multiplier *= 0.6
+                    vol_multiplier *= 0.6
+                    skew_multiplier *= 0.7
+                    kurt_multiplier *= 0.5
                 
-                # Add realistic variation
-                hourly_variation = 1.0 + 0.15 * np.sin(2 * np.pi * hour_utc / 24)
-                noise = np.random.normal(1.0, 0.05)  # 5% random variation
+                # Add realistic variation with different patterns for each metric
+                hourly_variation_vol = 1.0 + 0.15 * np.sin(2 * np.pi * hour_utc / 24)
+                hourly_variation_skew = 1.0 + 0.1 * np.sin(2 * np.pi * (hour_utc + 6) / 24)  # Phase shift
+                hourly_variation_kurt = 1.0 + 0.2 * np.sin(2 * np.pi * (hour_utc + 12) / 24)  # Different phase
                 
-                final_multiplier = base_multiplier * hourly_variation * noise
+                # Add noise with different characteristics for each metric
+                vol_noise = np.random.normal(1.0, 0.05)  # 5% random variation
+                skew_noise = np.random.normal(1.0, 0.08)  # 8% random variation
+                kurt_noise = np.random.normal(1.0, 0.12)  # 12% random variation
                 
-                # Calculate adjusted volatility for this time point
-                adjusted_volatility = base_prediction['predicted_volatility'] * final_multiplier
+                # Calculate final multipliers
+                final_vol_multiplier = vol_multiplier * hourly_variation_vol * vol_noise
+                final_skew_multiplier = skew_multiplier * hourly_variation_skew * skew_noise
+                final_kurt_multiplier = kurt_multiplier * hourly_variation_kurt * kurt_noise
+                
+                # Apply multipliers to predictions
+                adjusted_volatility = predicted_volatility * final_vol_multiplier
+                adjusted_skewness = predicted_skewness * final_skew_multiplier
+                adjusted_kurtosis = predicted_kurtosis * final_kurt_multiplier
                 
                 # Create prediction for this time point with all required database fields
                 prediction = {
@@ -284,10 +327,12 @@ class ContinuousCryptoPredictor:
                     'timestamp': future_time.isoformat(),
                     'minutes_ahead': (i + 1) * 5,
                     'predicted_volatility': adjusted_volatility,
-                    'predicted_skewness': base_prediction['predicted_skewness'],
-                    'predicted_kurtosis': base_prediction['predicted_kurtosis'],
+                    'predicted_skewness': adjusted_skewness,
+                    'predicted_kurtosis': adjusted_kurtosis,
                     'volatility_annualized': adjusted_volatility * np.sqrt(365 * 24 * 12),  # Annualized volatility
-                    'volatility_multiplier': final_multiplier,
+                    'volatility_multiplier': final_vol_multiplier,
+                    'skewness_multiplier': final_skew_multiplier,
+                    'kurtosis_multiplier': final_kurt_multiplier,
                     'hour_utc': hour_utc,
                     'is_us_trading_hours': 14 <= hour_utc <= 21,
                     'is_weekend': future_time.weekday() >= 5,
@@ -299,7 +344,7 @@ class ContinuousCryptoPredictor:
                     'prediction_period': '5_minutes',
                     'data_timestamp': start_time.isoformat(),
                     'model_version': self.current_model_version,
-                    'prediction_type': 'continuous_5min'
+                    'prediction_type': 'continuous_5min_varying'
                 }
                 
                 # Extract predictions
@@ -319,8 +364,10 @@ class ContinuousCryptoPredictor:
                 
                 predictions.append(prediction)
             
-            # Calculate summary statistics
+            # Calculate summary statistics for all metrics
             volatilities = [p['predicted_volatility'] for p in predictions]
+            skewnesses = [p['predicted_skewness'] for p in predictions]
+            kurtoses = [p['predicted_kurtosis'] for p in predictions]
             annualized_volatilities = [p['volatility_annualized'] for p in predictions]
             
             result = {
@@ -331,14 +378,32 @@ class ContinuousCryptoPredictor:
                 'predictions_count': len(predictions),
                 'predictions': predictions,
                 'summary_stats': {
-                    'min_volatility': min(volatilities),
-                    'max_volatility': max(volatilities),
-                    'mean_volatility': np.mean(volatilities),
-                    'std_volatility': np.std(volatilities),
-                    'volatility_range': max(volatilities) - min(volatilities),
-                    'min_volatility_annualized': min(annualized_volatilities),
-                    'max_volatility_annualized': max(annualized_volatilities),
-                    'mean_volatility_annualized': np.mean(annualized_volatilities)
+                    'volatility': {
+                        'min': min(volatilities),
+                        'max': max(volatilities),
+                        'mean': np.mean(volatilities),
+                        'std': np.std(volatilities),
+                        'range': max(volatilities) - min(volatilities)
+                    },
+                    'skewness': {
+                        'min': min(skewnesses),
+                        'max': max(skewnesses),
+                        'mean': np.mean(skewnesses),
+                        'std': np.std(skewnesses),
+                        'range': max(skewnesses) - min(skewnesses)
+                    },
+                    'kurtosis': {
+                        'min': min(kurtoses),
+                        'max': max(kurtoses),
+                        'mean': np.mean(kurtoses),
+                        'std': np.std(kurtoses),
+                        'range': max(kurtoses) - min(kurtoses)
+                    },
+                    'volatility_annualized': {
+                        'min': min(annualized_volatilities),
+                        'max': max(annualized_volatilities),
+                        'mean': np.mean(annualized_volatilities)
+                    }
                 }
             }
             
