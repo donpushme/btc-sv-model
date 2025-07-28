@@ -355,7 +355,7 @@ class ContinuousCryptoPredictor:
                 # Apply validation bounds to prevent extreme predictions
                 volatility = max(min(volatility, 0.1), 0.001)  # 0.1% to 10%
                 skewness = max(min(skewness, 2.0), -2.0)       # -2 to +2
-                kurtosis = max(min(kurtosis, 27.0), -1.0)      # -1 to +27 (excess kurtosis)
+                kurtosis = max(min(kurtosis, 10.0), -1.0)      # -1 to +10 (excess kurtosis) - more reasonable bounds
                 
                 # Update prediction with validated values
                 prediction['predicted_volatility'] = volatility

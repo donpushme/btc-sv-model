@@ -211,9 +211,9 @@ class CryptoDataProcessor:
                         # Convert excess kurtosis to absolute kurtosis and apply bounds
                         absolute_kurtosis = kurtosis + 3  # Convert to absolute kurtosis
                         
-                        # Apply reasonable bounds for kurtosis (3 to 30)
-                        # Normal distribution has kurtosis = 3, extreme values capped at 30
-                        absolute_kurtosis = max(min(absolute_kurtosis, 30.0), 3.0)
+                        # Apply reasonable bounds for kurtosis (3 to 15)
+                        # Normal distribution has kurtosis = 3, extreme values capped at 15 (more reasonable)
+                        absolute_kurtosis = max(min(absolute_kurtosis, 15.0), 3.0)
                         
                         # Convert back to excess kurtosis for consistency
                         excess_kurtosis = absolute_kurtosis - 3

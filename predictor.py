@@ -307,8 +307,8 @@ class RealTimeVolatilityPredictor:
         # Skewness can be negative or positive but should be reasonable (-2 to +2)
         skewness = max(min(skewness, 2.0), -2.0)
         
-        # Kurtosis (excess kurtosis) should be reasonable (-1 to +27, corresponding to absolute kurtosis 2-30)
-        kurtosis = max(min(kurtosis, 27.0), -1.0)
+        # Kurtosis (excess kurtosis) should be reasonable (-1 to +10, corresponding to absolute kurtosis 2-13)
+        kurtosis = max(min(kurtosis, 10.0), -1.0)
         
         # Current price for context
         if current_price is None:
@@ -464,8 +464,8 @@ class RealTimeVolatilityPredictor:
         # Skewness can be negative or positive but should be reasonable (-2 to +2)
         skewness = max(min(skewness, 2.0), -2.0)
         
-        # Kurtosis (excess kurtosis) should be reasonable (-1 to +27, corresponding to absolute kurtosis 2-30)
-        kurtosis = max(min(kurtosis, 27.0), -1.0)
+        # Kurtosis (excess kurtosis) should be reasonable (-1 to +10, corresponding to absolute kurtosis 2-13)
+        kurtosis = max(min(kurtosis, 10.0), -1.0)
         
         # Get the actual price at target timestamp
         if current_price is None:
@@ -487,9 +487,9 @@ class RealTimeVolatilityPredictor:
             market_regime = 'high_volatility_stress'
         
         # Risk assessment
-        if volatility > 0.05 or abs(skewness) > 1.5 or kurtosis > 15:
+        if volatility > 0.05 or abs(skewness) > 1.5 or kurtosis > 8:
             risk_assessment = 'high'
-        elif volatility > 0.025 or abs(skewness) > 0.8 or kurtosis > 8:
+        elif volatility > 0.025 or abs(skewness) > 0.8 or kurtosis > 5:
             risk_assessment = 'medium'
         else:
             risk_assessment = 'low'
@@ -555,9 +555,9 @@ class RealTimeVolatilityPredictor:
             risk_score += 1
         
         # Kurtosis contribution (fat tails)
-        if kurtosis > 5:
+        if kurtosis > 8:
             risk_score += 2
-        elif kurtosis > 3:
+        elif kurtosis > 5:
             risk_score += 1
         
         if risk_score >= 5:

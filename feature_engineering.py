@@ -255,11 +255,12 @@ class FeatureEngineer:
         # Preprocess targets before scaling
         df_processed = df.copy()
         
-        # Apply log transformation to kurtosis to handle extreme values
-        # Add small constant to avoid log(0) and handle negative excess kurtosis
+        # Apply more reasonable transformation to kurtosis
+        # Use a softer transformation that doesn't amplify values as much
         if 'target_kurtosis' in target_cols:
-            # Convert excess kurtosis to absolute kurtosis, then apply log
-            df_processed['target_kurtosis'] = np.log(df_processed['target_kurtosis'] + 4)  # +4 ensures positive values
+            # Use a softer transformation: sqrt(kurtosis + 1) instead of log
+            # This keeps values in a more reasonable range
+            df_processed['target_kurtosis'] = np.sqrt(df_processed['target_kurtosis'] + 1)
         
         # Fit scalers
         self.scalers['features'].fit(df[feature_cols])
@@ -275,9 +276,9 @@ class FeatureEngineer:
         
         df_scaled = df.copy()
         
-        # Apply log transformation to kurtosis before scaling
+        # Apply softer transformation to kurtosis before scaling
         if 'target_kurtosis' in target_cols:
-            df_scaled['target_kurtosis'] = np.log(df_scaled['target_kurtosis'] + 4)
+            df_scaled['target_kurtosis'] = np.sqrt(df_scaled['target_kurtosis'] + 1)
         
         # Scale features and targets
         df_scaled[feature_cols] = self.scalers['features'].transform(df[feature_cols])
@@ -290,9 +291,9 @@ class FeatureEngineer:
         # First inverse transform the scaled values
         targets_original = self.scalers['targets'].inverse_transform(targets)
         
-        # Reverse the log transformation for kurtosis (column 2)
+        # Reverse the sqrt transformation for kurtosis (column 2)
         if targets_original.shape[1] > 2:  # Ensure we have kurtosis column
-            targets_original[:, 2] = np.exp(targets_original[:, 2]) - 4
+            targets_original[:, 2] = targets_original[:, 2]**2 - 1
         
         return targets_original
 
