@@ -157,6 +157,11 @@ class EnhancedCryptoDataProcessor:
             lambda x: float(pd.Series(x).kurt()) if isinstance(x, list) and len(x) >= 4 else np.nan
         )
         
+        # Ensure all target columns are numeric before applying bounds
+        df['target_volatility'] = pd.to_numeric(df['target_volatility'], errors='coerce')
+        df['target_skewness'] = pd.to_numeric(df['target_skewness'], errors='coerce')
+        df['target_kurtosis'] = pd.to_numeric(df['target_kurtosis'], errors='coerce')
+        
         # Convert kurtosis from excess to absolute, apply bounds, then back to excess
         # This ensures realistic kurtosis values for Monte Carlo simulation
         df['target_kurtosis'] = df['target_kurtosis'].apply(
