@@ -265,7 +265,6 @@ class RealTimeVolatilityPredictor:
         
         # Check if scalers need to be fitted
         if hasattr(self, 'scalers_need_fitting') and self.scalers_need_fitting:
-            print(f"🔧 Fitting scalers with current data...")
             # Create dummy target data for fitting (we don't have targets for prediction)
             dummy_targets = pd.DataFrame({
                 'target_volatility': [0.02] * len(df),
@@ -279,7 +278,6 @@ class RealTimeVolatilityPredictor:
             
             self.feature_engineer.fit_scalers(df_with_targets, self.feature_cols, self.target_cols)
             self.scalers_need_fitting = False
-            print(f"✅ Scalers fitted successfully")
         
         df_scaled[self.feature_cols] = self.feature_engineer.scalers['features'].transform(
             df[self.feature_cols]

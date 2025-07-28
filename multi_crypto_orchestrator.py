@@ -133,11 +133,9 @@ class MultiCryptoOrchestrator:
             print("⚠️ Orchestrator is already running")
             return
         
-        print(f"\n🚀 Starting Multi-Crypto Continuous Prediction")
-        print(f"⏰ Prediction interval: {os.getenv('PREDICTION_INTERVAL_MINUTES', '5')} minutes")
-        print(f"🔮 Predictions per cycle: 288 (next 24 hours) per crypto")
-        print(f"📊 Cryptocurrencies: {', '.join(self.crypto_symbols)}")
-        print("=" * 60)
+        print(f"🚀 Multi-Crypto Prediction | "
+              f"Interval: {os.getenv('PREDICTION_INTERVAL_MINUTES', '5')}min | "
+              f"Cryptos: {', '.join(self.crypto_symbols)}")
         
         self.is_running = True
         self.stats['start_time'] = datetime.utcnow()
@@ -215,15 +213,10 @@ class MultiCryptoOrchestrator:
             self.stats['total_cycles'] = total_cycles
             self.stats['total_predictions'] = total_predictions
             
-            # Print status every 5 minutes
-            if self.stats['total_cycles'] % 10 == 0 and self.stats['total_cycles'] > 0:
-                print(f"\n📊 Multi-Crypto Status Update:")
-                print(f"   Active predictors: {len(self.predictors)}/{len(self.crypto_symbols)}")
-                print(f"   Total cycles: {total_cycles}")
-                print(f"   Total predictions: {total_predictions:,}")
-                for crypto_symbol, predictor in self.predictors.items():
-                    if predictor and hasattr(predictor, 'prediction_cycles'):
-                        print(f"   {crypto_symbol}: {predictor.prediction_cycles} cycles, {predictor.total_predictions_made:,} predictions")
+            # Print status every 10 cycles (less frequent)
+            if self.stats['total_cycles'] % 20 == 0 and self.stats['total_cycles'] > 0:
+                print(f"📊 Status: {len(self.predictors)}/{len(self.crypto_symbols)} active | "
+                      f"Cycles: {total_cycles} | Predictions: {total_predictions:,}")
     
     def stop(self):
         """Stop all cryptocurrency predictors."""

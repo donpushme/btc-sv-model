@@ -41,15 +41,12 @@ class CryptoVolatilityTrainer:
         os.makedirs(config.MODEL_SAVE_PATH, exist_ok=True)
         os.makedirs(config.RESULTS_PATH, exist_ok=True)
         
-        print(f"Using device: {self.device}")
-        print(f"Training model for {self.crypto_config['name']} ({crypto_symbol})")
+        print(f"Training {self.crypto_config['name']} ({crypto_symbol}) on {self.device}")
     
     def prepare_data(self, csv_path: str) -> Tuple[DataLoader, DataLoader, List[str], List[str]]:
         """
         Prepare training and validation data loaders.
         """
-        print(f"Loading and preprocessing data for {self.crypto_config['name']}...")
-        
         # Load and preprocess data
         processor = CryptoDataProcessor(csv_path, self.crypto_symbol)
         df = processor.preprocess_data(
@@ -62,15 +59,13 @@ class CryptoVolatilityTrainer:
         
         # Remove any remaining NaN values
         df = df.dropna().reset_index(drop=True)
-        print(f"Final dataset shape after feature engineering: {df.shape}")
         
         # Get feature and target columns
         feature_cols = [col for col in df.columns if col not in 
                        ['timestamp', 'target_volatility', 'target_skewness', 'target_kurtosis']]
         target_cols = ['target_volatility', 'target_skewness', 'target_kurtosis']
         
-        print(f"Number of features: {len(feature_cols)}")
-        print(f"Features: {feature_cols[:10]}...")  # Show first 10 features
+        print(f"Dataset: {df.shape} | Features: {len(feature_cols)}")
         
         # Update config with actual input size
         self.config.INPUT_SIZE = len(feature_cols)
@@ -88,15 +83,10 @@ class CryptoVolatilityTrainer:
             df_scaled, feature_cols, target_cols, self.config.SEQUENCE_LENGTH
         )
         
-        print(f"Sequence shape: X={X.shape}, y={y.shape}")
-        
         # Train/validation split
         X_train, X_val, y_train, y_val = create_train_val_split(
             X, y, self.config.VALIDATION_SPLIT
         )
-        
-        print(f"Train: X={X_train.shape}, y={y_train.shape}")
-        print(f"Validation: X={X_val.shape}, y={y_val.shape}")
         
         # Create datasets and data loaders
         train_dataset = CryptoDataset(X_train, y_train)
@@ -267,13 +257,11 @@ class CryptoVolatilityTrainer:
             training_history['val_metrics'].append(val_metrics)
             
             # Print progress
-            if epoch % 10 == 0 or epoch == self.config.NUM_EPOCHS - 1:
-                print(f"Epoch {epoch}/{self.config.NUM_EPOCHS}")
-                print(f"  Train Loss: {train_metrics['total_loss']:.6f}")
-                print(f"  Val Loss: {val_metrics['total_loss']:.6f}")
-                print(f"  Val R² - Vol: {val_metrics['r2_vol']:.4f}, "
-                      f"Skew: {val_metrics['r2_skew']:.4f}, "
-                      f"Kurt: {val_metrics['r2_kurt']:.4f}")
+            if epoch % 20 == 0 or epoch == self.config.NUM_EPOCHS - 1:
+                print(f"Epoch {epoch}/{self.config.NUM_EPOCHS} | "
+                      f"Train: {train_metrics['total_loss']:.6f} | "
+                      f"Val: {val_metrics['total_loss']:.6f} | "
+                      f"R²: {val_metrics['r2_vol']:.3f}/{val_metrics['r2_skew']:.3f}/{val_metrics['r2_kurt']:.3f}")
             
             # Early stopping and checkpointing
             if val_metrics['total_loss'] < self.best_val_loss:
@@ -323,14 +311,10 @@ class CryptoVolatilityTrainer:
             'last_updated': datetime.now().isoformat()
         }, model_path)
         
-        print(f"Model saved to {model_path}")
-        
         # Save feature engineer state (overwrite existing file)
         feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer.pkl")
         with open(feature_engineer_path, 'wb') as f:
             pickle.dump(self.feature_engineer, f)
-        
-        print(f"Feature engineer saved to {feature_engineer_path}")
         
         # Save model metadata (overwrite existing file)
         metadata = {
@@ -438,23 +422,14 @@ class CryptoVolatilityTrainer:
         Returns:
             Dictionary with retraining results
         """
-        print(f"🔄 Retraining with recent data (last {days_back} days)...")
-        
         # Load the data
         processor = CryptoDataProcessor(csv_path, self.crypto_symbol)
         df = processor.load_data()
         
-        print(f"📊 Loaded {len(df)} data points from CSV")
-        print(f"📊 CSV columns: {list(df.columns)}")
-        print(f"📊 CSV sample:")
-        print(df.head())
-        
         # For retraining, be more flexible with data requirements
         if len(df) < 100:
-            print(f"⚠️ Very limited data available ({len(df)} points). Using all data for retraining.")
             recent_df = df.copy()
         elif len(df) < 500:
-            print(f"⚠️ Limited data available ({len(df)} points). Using all data for retraining.")
             recent_df = df.copy()
         else:
             # Filter to recent data only
@@ -464,40 +439,25 @@ class CryptoVolatilityTrainer:
             
             # If we don't have enough recent data, use more historical data
             if len(recent_df) < 100:
-                print(f"⚠️ Limited recent data ({len(recent_df)} points). Using more historical data.")
                 # Use at least 100 data points or 30 days, whichever is more
                 min_data_points = max(100, len(df) // 3)
                 recent_df = df.tail(min_data_points).copy()
         
-        print(f"📊 Using {len(recent_df):,} data points for retraining")
-        print(f"📊 Date range: {recent_df['timestamp'].min()} to {recent_df['timestamp'].max()}")
-        
         # Check if we have enough data - reduced minimum requirements
         if len(recent_df) < 20:
-            print(f"❌ Insufficient data for retraining: {len(recent_df)} < 20 minimum required")
             return {
                 'success': False,
                 'error': f'Insufficient data: {len(recent_df)} < 20 minimum required',
                 'data_points': len(recent_df)
             }
         
-        if len(recent_df) < 100:
-            print("⚠️  Warning: Very small dataset for retraining. Model performance may be limited.")
-        
-        # Preprocess the recent data
-        print(f"🔄 Starting preprocessing...")
-        
         # Use smaller rolling windows if data is limited
         if len(recent_df) < 200:
-            print(f"⚠️ Limited data detected ({len(recent_df)} points). Using very small rolling windows.")
             return_windows = [6, 12]  # Very small windows
         elif len(recent_df) < 500:
-            print(f"⚠️ Limited data detected ({len(recent_df)} points). Using smaller rolling windows.")
             return_windows = self.config.RETRAIN_SMALL_WINDOWS
         else:
             return_windows = self.config.RETRAIN_NORMAL_WINDOWS
-        
-        print(f"📊 Using rolling windows: {return_windows}")
         
         try:
             recent_df = processor.preprocess_data(

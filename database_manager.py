@@ -136,7 +136,6 @@ class DatabaseManager:
             
             # Insert document
             result = self.predictions_collection.insert_one(doc)
-            print(f"💾 Saved prediction to database: {result.inserted_id}")
             
             return str(result.inserted_id)
             

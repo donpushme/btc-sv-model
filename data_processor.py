@@ -222,19 +222,10 @@ class CryptoDataProcessor:
                         df.loc[i, 'target_skewness'] = skewness
                         df.loc[i, 'target_kurtosis'] = excess_kurtosis
         
-        # Fill remaining NaN targets with reasonable defaults
-        target_nan_count = df[['target_volatility', 'target_skewness', 'target_kurtosis']].isna().sum()
-        print(f"📊 Target NaN counts: {target_nan_count.to_dict()}")
-        
         # Fill NaN targets with reasonable defaults
         df['target_volatility'] = df['target_volatility'].fillna(0.02)  # 2% volatility
         df['target_skewness'] = df['target_skewness'].fillna(0.0)  # No skew
         df['target_kurtosis'] = df['target_kurtosis'].fillna(0.0)  # Normal kurtosis
-        print(f"✅ Filled NaN target values with defaults")
-        
-        # Verify we have valid targets
-        final_target_count = df[['target_volatility', 'target_skewness', 'target_kurtosis']].notna().sum()
-        print(f"📊 Final target counts: {final_target_count.to_dict()}")
         
         return df
     

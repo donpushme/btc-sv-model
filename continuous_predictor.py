@@ -274,11 +274,8 @@ class ContinuousCryptoPredictor:
             Dict with all 288 predictions
         """
         try:
-            print(f"🔮 Generating 288 volatility predictions for next 24 hours...")
-            
             # Get base prediction
             base_prediction = self.predict_and_save(price_data, save_to_db=False)
-            print(f"🔮 Base prediction: {base_prediction}")
             
             # Generate time points for next 24 hours (288 × 5-minute intervals)
             start_time = pd.to_datetime(price_data['timestamp'].iloc[-1])
@@ -394,13 +391,10 @@ class ContinuousCryptoPredictor:
             Batch ID for the saved prediction record
         """
         if not self.enable_database:
-            print("⚠️ Database not enabled, skipping save")
             return None
         
         try:
             batch_id = f"continuous_{int(time.time())}"
-            
-            print(f"💾 Saving 1 record with {len(prediction_result['predictions'])} predictions to database...")
             
             # Create single record containing all 288 predictions
             prediction_batch_record = {
@@ -424,11 +418,10 @@ class ContinuousCryptoPredictor:
                 prediction_batch_record.get('model_version', 'unknown')
             )
             
-            print(f"✅ Saved 1 record containing {len(prediction_result['predictions'])} predictions with batch ID: {batch_id}")
             return batch_id
             
         except Exception as e:
-            print(f"❌ Failed to save prediction record to database: {str(e)}")
+            print(f"❌ Failed to save to database: {str(e)}")
             return None
     
     def predict_and_save(self, price_data: pd.DataFrame, save_to_db: bool = True) -> Dict[str, float]:
@@ -787,12 +780,9 @@ class ContinuousCryptoPredictor:
             cycle_start = time.time()
             self.prediction_cycles += 1
             
-            print(f"\n⏰ === Prediction Cycle #{self.prediction_cycles} ===")
-            print(f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-            
             # Check if model has been updated by background retraining
             if self._check_model_update():
-                print("🔄 Using updated model for this prediction cycle")
+                print(f"🔄 Model updated - Cycle #{self.prediction_cycles}")
             
             # Fetch real-time data
             price_data = self.fetch_realtime_data()
@@ -803,12 +793,9 @@ class ContinuousCryptoPredictor:
             
             # Check if model retraining is needed (non-blocking)
             if self.enable_online_learning and self.check_retraining_conditions():
-                print(f"🧠 Triggering background retraining...")
                 retrain_triggered = self.perform_retraining()
                 if retrain_triggered:
-                    print(f"✅ Background retraining initiated (non-blocking)")
-                else:
-                    print(f"⚠️ Background retraining already in progress")
+                    print(f"🧠 Background retraining initiated")
             
             # Generate 288 predictions
             prediction_result = self.generate_288_predictions(price_data)
@@ -821,39 +808,23 @@ class ContinuousCryptoPredictor:
             # Update counters
             self.total_predictions_made += prediction_result['predictions_count']
             
-            # Display summary
+            # Display essential summary
             stats = prediction_result['summary_stats']
-            print(f"\n📊 Cycle Summary:")
-            print(f"   Current Price: ${prediction_result['current_price']:,.2f}")
-            print(f"   Predictions Generated: {prediction_result['predictions_count']}")
-            print(f"   Volatility Range: {stats['min_volatility']:.4f} - {stats['max_volatility']:.4f}")
-            print(f"   Mean Volatility: {stats['mean_volatility']:.4f}")
-            print(f"   Model Version: {self.current_model_version}")
+            print(f"⏰ {datetime.utcnow().strftime('%H:%M:%S')} | "
+                  f"${prediction_result['current_price']:,.0f} | "
+                  f"Vol: {stats['mean_volatility']:.4f} | "
+                  f"Range: {stats['min_volatility']:.4f}-{stats['max_volatility']:.4f}")
+            
+            # Show retraining status only if relevant
             if self.enable_online_learning:
-                if self.last_retrain_time:
-                    hours_since = (datetime.utcnow() - self.last_retrain_time).total_seconds() / 3600
-                    print(f"   Last Retrain: {hours_since:.1f}h ago")
-                else:
-                    print(f"   Last Retrain: Never")
-                print(f"   Training Data: Saved for continuous learning")
-                # Show retraining status
                 with self.retraining_lock:
                     if self.is_retraining:
-                        print(f"   Background Retraining: 🔄 IN PROGRESS")
-                    else:
-                        print(f"   Background Retraining: ✅ IDLE")
-            if batch_id:
-                print(f"   Database Record ID: {batch_id}")
-                print(f"   Database Storage: 1 record with {prediction_result['predictions_count']} predictions")
-            
-            # Timing
-            cycle_time = time.time() - cycle_start
-            print(f"⏱️  Cycle processing time: {cycle_time:.2f} seconds")
+                        print(f"   🔄 Retraining in progress...")
             
             return True
             
         except Exception as e:
-            print(f"❌ Prediction cycle failed: {str(e)}")
+            print(f"❌ Cycle #{self.prediction_cycles} failed: {str(e)}")
             return False
     
     def start_continuous_prediction(self, interval_minutes: int = 5):
@@ -863,25 +834,16 @@ class ContinuousCryptoPredictor:
         Args:
             interval_minutes: How often to make predictions (should be 5 for your use case)
         """
-        print(f"\n🚀 Starting Continuous {self.crypto_config['name']} Volatility Prediction")
-        print(f"⏰ Prediction interval: {interval_minutes} minutes")
-        print(f"🔮 Predictions per cycle: 288 (next 24 hours)")
-        print(f"💾 Database storage: {'Enabled' if self.enable_database else 'Disabled'}")
-        print(f"🧠 Online learning: {'Enabled' if self.enable_online_learning else 'Disabled'}")
-        if self.enable_online_learning:
-            print(f"   ├─ Retrain interval: {self.retrain_interval_hours} hours")
-            print(f"   ├─ Min data points: {self.min_new_data_points}")
-            print(f"   └─ Training data: Automatically saved from real-time feeds")
-            print(f"   └─ Background retraining: ✅ INDEPENDENT THREAD")
-        print("=" * 60)
+        print(f"🚀 Starting {self.crypto_config['name']} prediction | "
+              f"Interval: {interval_minutes}min | "
+              f"DB: {'On' if self.enable_database else 'Off'} | "
+              f"Learning: {'On' if self.enable_online_learning else 'Off'}")
         
         self.is_running = True
         
         # Start background retraining thread
         if self.enable_online_learning:
             self._start_background_retraining_thread()
-        
-        print(f"🎯 Starting prediction cycles...")
         
         try:
             while self.is_running:
