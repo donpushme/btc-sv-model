@@ -31,7 +31,7 @@ class DatabaseManager:
         
         # Get connection string from environment or use default
         if connection_string is None:
-            connection_string = os.getenv('MONGODB_CONNECTION_STRING', 'mongodb://localhost:27017/')
+            connection_string = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
         
         # Connect to MongoDB
         try:
