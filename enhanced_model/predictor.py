@@ -152,9 +152,11 @@ class EnhancedRealTimeVolatilityPredictor:
                 raise ValueError("Model not loaded. Please load a model first.")
         
         try:
-            # Preprocess data
+            # Preprocess data using the provided DataFrame directly
             processor = EnhancedCryptoDataProcessor("", self.crypto_symbol)
-            processor.df = price_data  # Use provided data
+            processor.df = price_data.copy()  # Use provided data directly
+            
+            # Preprocess the data
             df = processor.preprocess_data(
                 return_windows=self.config.RETURN_WINDOWS,
                 prediction_horizon=self.config.PREDICTION_HORIZON
@@ -295,12 +297,14 @@ class EnhancedRealTimeVolatilityPredictor:
         }
 
 def main():
-    """Example usage of the enhanced predictor."""
+    """Example usage of the enhanced predictor with live data."""
     import sys
     
     if len(sys.argv) < 2:
         print("Usage: python predictor.py <crypto_symbol>")
         print("Supported cryptos: BTC, ETH, XAU, SOL")
+        print("\nThis demonstrates how to use the predictor with live data.")
+        print("In production, you would pass live OHLC data from your data source.")
         sys.exit(1)
     
     crypto_symbol = sys.argv[1].upper()
@@ -323,30 +327,60 @@ def main():
     model_info = predictor.get_model_info()
     print(f"📊 Model Info: {model_info}")
     
-    # Example: Create sample data for prediction
-    print("\n🎯 Making sample prediction...")
-    
-    # Create sample OHLC data (you would use real data here)
-    dates = pd.date_range(start='2024-01-01', periods=200, freq='5T')
-    sample_data = pd.DataFrame({
-        'timestamp': dates,
-        'open': 45000 + np.random.randn(200) * 100,
-        'high': 45100 + np.random.randn(200) * 100,
-        'low': 44900 + np.random.randn(200) * 100,
-        'close': 45000 + np.random.randn(200) * 100,
-        'volume': 1000 + np.random.randn(200) * 100
-    })
+    # Simulate live data (in production, this would come from your data source)
+    print("\n🎯 Simulating live data for prediction...")
+    print("Note: In production, you would pass real live OHLC data here.")
     
     try:
-        # Make prediction
-        prediction = predictor.predict_next_period(sample_data, 45000.0)
+        # Simulate recent live OHLC data (this is what you'd get from Pyth Network or other APIs)
+        # In production, you'd replace this with actual live data
+        current_time = pd.Timestamp.now()
+        live_data = []
         
-        print(f"✅ Prediction successful!")
+        # Generate simulated live data for the last 200 periods (5-minute intervals)
+        base_price = 45000 if crypto_symbol == 'BTC' else 3000 if crypto_symbol == 'ETH' else 2000 if crypto_symbol == 'XAU' else 100
+        
+        for i in range(200):
+            timestamp = current_time - pd.Timedelta(minutes=5 * (200 - i))
+            price_change = np.random.normal(0, 0.001) * base_price
+            open_price = base_price + price_change
+            high_price = open_price + abs(np.random.normal(0, 0.002)) * base_price
+            low_price = open_price - abs(np.random.normal(0, 0.002)) * base_price
+            close_price = open_price + np.random.normal(0, 0.001) * base_price
+            volume = 1000 + np.random.normal(0, 200)
+            
+            live_data.append({
+                'timestamp': timestamp,
+                'open': open_price,
+                'high': high_price,
+                'low': low_price,
+                'close': close_price,
+                'volume': volume
+            })
+        
+        # Convert to DataFrame (this is what you'd pass to the predictor)
+        live_df = pd.DataFrame(live_data)
+        current_price = live_df['close'].iloc[-1]
+        
+        print(f"📊 Simulated {len(live_df)} periods of live data")
+        print(f"💰 Current price: ${current_price:.2f}")
+        print(f"🕐 Latest timestamp: {live_df['timestamp'].iloc[-1]}")
+        
+        # Make prediction on live data
+        prediction = predictor.predict_next_period(live_df, current_price)
+        
+        print(f"\n✅ Prediction successful!")
         print(f"📈 Volatility: {prediction['predicted_volatility']:.6f}")
         print(f"📊 Skewness: {prediction['predicted_skewness']:.6f}")
         print(f"📉 Kurtosis: {prediction['predicted_kurtosis']:.6f}")
         print(f"⚠️  Risk Level: {prediction['risk_level']}")
         print(f"❓ Uncertainty: {prediction['uncertainty_volatility']:.6f}, {prediction['uncertainty_skewness']:.6f}, {prediction['uncertainty_kurtosis']:.6f}")
+        
+        print(f"\n💡 Usage in production:")
+        print(f"   # Get live data from your source (Pyth Network, etc.)")
+        print(f"   live_data = get_live_ohlc_data('{crypto_symbol}')")
+        print(f"   current_price = live_data['close'].iloc[-1]")
+        print(f"   prediction = predictor.predict_next_period(live_data, current_price)")
         
     except Exception as e:
         print(f"❌ Prediction failed: {str(e)}")
