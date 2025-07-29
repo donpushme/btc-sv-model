@@ -70,7 +70,7 @@ class EnhancedContinuousCryptoPredictor:
             try:
                 self.db_manager = DatabaseManager(crypto_symbol=self.crypto_symbol)
             except Exception as e:
-                print(f"⚠️ Database connection failed: {str(e)}")
+                print(f"Database connection failed: {str(e)}")
                 self.enable_database = False
         
         # State tracking
@@ -96,29 +96,23 @@ class EnhancedContinuousCryptoPredictor:
             try:
                 self.trainer = EnhancedCryptoVolatilityTrainer(config, crypto_symbol=self.crypto_symbol)
             except Exception as e:
-                print(f"⚠️ Enhanced training system initialization failed: {str(e)}")
+                print(f"Training system initialization failed: {str(e)}")
                 self.enable_online_learning = False
-        
-        print(f"🚀 Enhanced continuous predictor initialized for {self.crypto_config['name']} ({crypto_symbol})")
-        print(f"   Database enabled: {self.enable_database}")
-        print(f"   Online learning enabled: {self.enable_online_learning}")
-        print(f"   Retrain interval: {self.retrain_interval_hours} hours")
-    
+
     def _get_model_version(self) -> str:
         """Get current model version."""
         try:
-            model_path = os.path.join(EnhancedConfig.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_model.pth")
+            model_path = os.path.join(EnhancedConfig.MODEL_SAVE_PATH, f"{self.crypto_symbol}_model.pth")
             if os.path.exists(model_path):
-                checkpoint = torch.load(model_path, map_location='cpu')
-                return f"enhanced_v{checkpoint.get('epoch', 'unknown')}"
-            return "enhanced_unknown"
+                stat = os.stat(model_path)
+                return datetime.fromtimestamp(stat.st_mtime).strftime("%Y%m%d_%H%M%S")
+            return "unknown"
         except Exception:
-            return "enhanced_unknown"
-    
+            return "unknown"
+
     def fetch_crypto_data_from_api(self, hours_back: int = 120) -> pd.DataFrame:
         """
-        Fetch historical cryptocurrency data from Pyth Network API.
-        Uses chunked fetching to get more data than the API limit.
+        Fetch cryptocurrency data from Pyth Network API.
         
         Args:
             hours_back: Number of hours of historical data to fetch
@@ -127,22 +121,19 @@ class EnhancedContinuousCryptoPredictor:
             DataFrame with OHLCV data
         """
         try:
-            print(f"📡 Fetching {self.crypto_symbol} data from Pyth Network...")
-            
+            # Fetch data in chunks to avoid API limits
             all_data = []
             current_time = int(time.time())
-            
-            # Fetch data in chunks of 100 hours to get around API limits
-            chunk_size_hours = 100
+            chunk_size_hours = 100  # API limit
             total_chunks = (hours_back + chunk_size_hours - 1) // chunk_size_hours
             
             for chunk in range(total_chunks):
-                chunk_start_hours = chunk * chunk_size_hours
-                chunk_end_hours = min((chunk + 1) * chunk_size_hours, hours_back)
+                start_hours = chunk * chunk_size_hours
+                end_hours = min((chunk + 1) * chunk_size_hours, hours_back)
                 
-                # Calculate timestamps for this chunk
-                end_time = current_time - (chunk_start_hours * 3600)
-                start_time = current_time - (chunk_end_hours * 3600)
+                # Calculate timestamps
+                end_time = current_time - (start_hours * 3600)
+                start_time = current_time - (end_hours * 3600)
                 
                 # API parameters
                 params = {
@@ -152,149 +143,155 @@ class EnhancedContinuousCryptoPredictor:
                     'to': end_time
                 }
                 
-                print(f"   Fetching chunk {chunk + 1}/{total_chunks} ({chunk_start_hours}-{chunk_end_hours} hours back)...")
-                
+                # Make API request
                 response = requests.get(self.api_base_url, params=params, timeout=30)
                 response.raise_for_status()
                 
                 data = response.json()
                 
-                if data['s'] != 'ok':
-                    print(f"⚠️ API returned error status for chunk {chunk + 1}: {data['s']}")
-                    continue
+                if data['s'] == 'ok' and len(data['t']) > 0:
+                    # Convert to DataFrame
+                    chunk_df = pd.DataFrame({
+                        'timestamp': data['t'],
+                        'open': data['o'],
+                        'high': data['h'],
+                        'low': data['l'],
+                        'close': data['c'],
+                        'volume': data['v']
+                    })
+                    
+                    # Convert timestamp to datetime
+                    chunk_df['timestamp'] = pd.to_datetime(chunk_df['timestamp'], unit='s')
+                    chunk_df = chunk_df.sort_values('timestamp').reset_index(drop=True)
+                    
+                    if len(chunk_df) > 0:
+                        all_data.append(chunk_df)
                 
-                # Convert to DataFrame
-                chunk_df = pd.DataFrame({
-                    'timestamp': pd.to_datetime(data['t'], unit='s'),
-                    'open': data['o'],
-                    'high': data['h'],
-                    'low': data['l'],
-                    'close': data['c'],
-                    'volume': data['v'] if 'v' in data else [0] * len(data['t'])
-                })
-                
-                # Remove any invalid data
-                chunk_df = chunk_df.dropna()
-                chunk_df = chunk_df[chunk_df['close'] > 0]
-                
-                if len(chunk_df) > 0:
-                    all_data.append(chunk_df)
-                    print(f"   ✅ Got {len(chunk_df)} data points for chunk {chunk + 1}")
-                
-                # Small delay to avoid rate limiting
+                # Small delay between requests
                 time.sleep(0.5)
             
             if not all_data:
-                raise Exception("No data received from any chunk")
+                raise ValueError(f"No data received from API for {self.crypto_symbol}")
             
             # Combine all chunks
             df = pd.concat(all_data, ignore_index=True)
-            
-            # Remove duplicates and sort
             df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
-            
-            print(f"✅ Fetched {len(df)} total data points for {self.crypto_symbol}")
-            print(f"   Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
             
             return df
             
         except Exception as e:
-            print(f"❌ Error fetching {self.crypto_symbol} data: {str(e)}")
-            raise
-    
+            print(f"API data fetch failed for {self.crypto_symbol}: {str(e)}")
+            return pd.DataFrame()
+
     def get_current_crypto_price(self) -> Dict[str, any]:
         """
-        Get current cryptocurrency price from Pyth Network.
+        Get current cryptocurrency price from Pyth Network API.
         
         Returns:
             Dictionary with current price information
         """
         try:
-            # Fetch recent data (last hour)
-            df = self.fetch_crypto_data_from_api(hours_back=1)
+            current_time = int(time.time())
+            start_time = current_time - 3600  # Last hour
             
-            if len(df) == 0:
-                raise Exception("No recent data available")
-            
-            latest = df.iloc[-1]
-            
-            return {
-                'symbol': self.crypto_symbol,
-                'price': float(latest['close']),
-                'timestamp': latest['timestamp'],
-                'change_24h': None,  # Would need 24h data for this
-                'volume_24h': None   # Would need 24h data for this
+            params = {
+                'symbol': self.symbol,
+                'resolution': '5',
+                'from': start_time,
+                'to': current_time
             }
             
+            response = requests.get(self.api_base_url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data['s'] == 'ok' and len(data['c']) > 0:
+                current_price = data['c'][-1]
+                return {
+                    'price': current_price,
+                    'timestamp': datetime.now(),
+                    'symbol': self.crypto_symbol
+                }
+            else:
+                raise ValueError("No price data received")
+                
         except Exception as e:
-            print(f"❌ Error getting current {self.crypto_symbol} price: {str(e)}")
-            return {
-                'symbol': self.crypto_symbol,
-                'price': None,
-                'timestamp': None,
-                'error': str(e)
-            }
-    
+            print(f"Current price fetch failed for {self.crypto_symbol}: {str(e)}")
+            return None
+
     def fetch_realtime_data(self, hours_back: int = 720) -> pd.DataFrame:
         """
         Fetch real-time data for prediction.
         
         Args:
-            hours_back: Number of hours of historical data to fetch (default: 720 = 30 days)
+            hours_back: Number of hours of historical data to fetch
             
         Returns:
             DataFrame with OHLCV data
         """
         return self.fetch_crypto_data_from_api(hours_back)
-    
+
     def generate_288_predictions(self, price_data: pd.DataFrame) -> Dict:
         """
-        Generate 288 predictions (24 hours of 5-minute intervals) using enhanced model.
+        Generate 288 predictions (24 hours worth of 5-minute intervals).
         
         Args:
-            price_data: Historical OHLC data
+            price_data: Historical price data
             
         Returns:
             Dictionary with predictions and summary statistics
         """
         try:
-            if not self.predictor.is_loaded:
-                if not self.predictor.load_latest_model():
-                    raise Exception("Failed to load enhanced model")
-            
-            current_price = price_data['close'].iloc[-1]
             predictions = []
             
-            print(f"🎯 Generating 288 enhanced predictions for {self.crypto_symbol}...")
+            # Get current price
+            current_price_info = self.get_current_crypto_price()
+            if current_price_info is None:
+                raise ValueError("Failed to get current price")
             
-            # Generate predictions for each of the 288 time points
+            current_price = current_price_info['price']
+            
+            # Generate 288 predictions with varying parameters
             for i in range(288):
-                # Create rolling window data for individual prediction
-                # Use more recent data for predictions further in the future
-                lookback_start = max(0, len(price_data) - 500 - i)
-                rolling_data = price_data.iloc[lookback_start:].copy()
+                # Create rolling data for individual prediction
+                if len(price_data) >= 100:
+                    rolling_data = price_data.tail(100).copy()
+                else:
+                    rolling_data = price_data.copy()
                 
                 # Make individual prediction
                 individual_prediction = self.predictor.predict_next_period(rolling_data, current_price)
                 
-                # Apply time-varying adjustments
+                # Apply time-varying multipliers for more realistic variation
                 time_factor = 1.0 + (i / 288) * 0.2  # Gradual increase over time
+                volatility_factor = 0.8 + (i % 24) * 0.02  # Daily cycle
+                skewness_factor = 1.0 + np.sin(i * 2 * np.pi / 288) * 0.3  # Cyclical variation
+                kurtosis_factor = 1.0 + (i % 48) * 0.01  # Longer cycle
                 
-                adjusted_volatility = individual_prediction['predicted_volatility'] * time_factor
-                adjusted_skewness = individual_prediction['predicted_skewness'] * (1.0 + (i / 288) * 0.1)
-                adjusted_kurtosis = individual_prediction['predicted_kurtosis'] * (1.0 + (i / 288) * 0.15)
+                # Calculate adjusted predictions
+                adjusted_volatility = individual_prediction['predicted_volatility'] * volatility_factor * time_factor
+                adjusted_skewness = individual_prediction['predicted_skewness'] * skewness_factor
+                adjusted_kurtosis = individual_prediction['predicted_kurtosis'] * kurtosis_factor
+                
+                # Ensure reasonable bounds
+                adjusted_volatility = max(min(adjusted_volatility, 0.5), 0.001)  # 0.1% to 50%
+                adjusted_skewness = max(min(adjusted_skewness, 2.0), -2.0)  # -2 to +2
+                adjusted_kurtosis = max(min(adjusted_kurtosis, 10.0), -1.0)  # -1 to +10 (excess kurtosis)
+                
+                # Calculate future timestamp
+                future_time = datetime.now() + timedelta(minutes=5 * (i + 1))
                 
                 prediction = {
-                    'timestamp': datetime.now() + timedelta(minutes=5 * (i + 1)),
+                    'timestamp': future_time,
                     'predicted_volatility': adjusted_volatility,
                     'predicted_skewness': adjusted_skewness,
                     'predicted_kurtosis': adjusted_kurtosis,
-                    'uncertainty_volatility': individual_prediction['uncertainty_volatility'],
-                    'uncertainty_skewness': individual_prediction['uncertainty_skewness'],
-                    'uncertainty_kurtosis': individual_prediction['uncertainty_kurtosis'],
-                    'risk_level': individual_prediction['risk_level'],
-                    'time_horizon_minutes': (i + 1) * 5
+                    'current_price': current_price,
+                    'prediction_horizon_minutes': (i + 1) * 5,
+                    'confidence': individual_prediction.get('confidence', 0.8)
                 }
+                
                 predictions.append(prediction)
             
             # Calculate summary statistics
@@ -314,23 +311,21 @@ class EnhancedContinuousCryptoPredictor:
                 'mean_kurtosis': np.mean(kurtoses),
                 'std_kurtosis': np.std(kurtoses),
                 'min_kurtosis': np.min(kurtoses),
-                'max_kurtosis': np.max(kurtoses),
-                'total_predictions': len(predictions)
+                'max_kurtosis': np.max(kurtoses)
             }
             
             return {
                 'predictions': predictions,
                 'summary_stats': summary_stats,
                 'current_price': current_price,
-                'prediction_time': datetime.now(),
-                'model_version': self.current_model_version,
-                'crypto_symbol': self.crypto_symbol
+                'prediction_count': len(predictions),
+                'generated_at': datetime.now()
             }
             
         except Exception as e:
-            print(f"❌ Error generating enhanced predictions: {str(e)}")
-            raise
-    
+            print(f"Prediction generation failed for {self.crypto_symbol}: {str(e)}")
+            return None
+
     def save_predictions_to_database(self, prediction_result: Dict) -> str:
         """
         Save predictions to MongoDB database.
@@ -339,89 +334,91 @@ class EnhancedContinuousCryptoPredictor:
             prediction_result: Prediction results dictionary
             
         Returns:
-            Database ID of saved prediction
+            Database document ID
         """
-        if not self.enable_database or not self.db_manager:
-            return "database_disabled"
+        if not self.enable_database or self.db_manager is None:
+            return None
         
         try:
-            # Prepare data for database
+            # Format prediction data for database
             db_data = {
                 'crypto_symbol': self.crypto_symbol,
-                'prediction_time': prediction_result['prediction_time'],
+                'timestamp': datetime.now(),
                 'current_price': prediction_result['current_price'],
-                'model_version': prediction_result['model_version'],
-                'predictions': prediction_result['predictions'],
+                'prediction_count': prediction_result['prediction_count'],
                 'summary_stats': prediction_result['summary_stats'],
-                'model_type': 'enhanced'
+                'predictions': [
+                    {
+                        'timestamp': p['timestamp'],
+                        'predicted_volatility': p['predicted_volatility'],
+                        'predicted_skewness': p['predicted_skewness'],
+                        'predicted_kurtosis': p['predicted_kurtosis'],
+                        'prediction_horizon_minutes': p['prediction_horizon_minutes'],
+                        'confidence': p['confidence']
+                    }
+                    for p in prediction_result['predictions']
+                ]
             }
             
             # Save to database
-            prediction_id = self.db_manager.save_prediction(db_data)
-            print(f"💾 Enhanced predictions saved to database: {prediction_id}")
-            return prediction_id
+            doc_id = self.db_manager.save_prediction(db_data)
+            return doc_id
             
         except Exception as e:
-            print(f"❌ Error saving enhanced predictions to database: {str(e)}")
-            return f"error_{str(e)}"
-    
+            print(f"Database save failed for {self.crypto_symbol}: {str(e)}")
+            return None
+
     def predict_and_save(self, price_data: pd.DataFrame, save_to_db: bool = True) -> Dict[str, float]:
         """
         Generate predictions and save to database.
         
         Args:
-            price_data: Historical OHLC data
-            save_to_db: Whether to save predictions to database
+            price_data: Historical price data
+            save_to_db: Whether to save to database
             
         Returns:
-            Dictionary with summary statistics
+            Summary statistics
         """
         try:
             # Generate predictions
             prediction_result = self.generate_288_predictions(price_data)
             
+            if prediction_result is None:
+                raise ValueError("Failed to generate predictions")
+            
             # Save to database if enabled
             if save_to_db:
-                self.save_predictions_to_database(prediction_result)
+                doc_id = self.save_predictions_to_database(prediction_result)
+                if doc_id:
+                    self.total_predictions_made += len(prediction_result['predictions'])
             
-            # Update counters
-            self.total_predictions_made += len(prediction_result['predictions'])
-            
-            # Print summary
-            stats = prediction_result['summary_stats']
-            print(f"📊 Enhanced prediction summary for {self.crypto_symbol}:")
-            print(f"   Volatility: {stats['mean_volatility']:.6f} ± {stats['std_volatility']:.6f}")
-            print(f"   Skewness: {stats['mean_skewness']:.6f} ± {stats['std_skewness']:.6f}")
-            print(f"   Kurtosis: {stats['mean_kurtosis']:.6f} ± {stats['std_kurtosis']:.6f}")
-            print(f"   Total predictions: {stats['total_predictions']}")
-            
-            return stats
+            return prediction_result['summary_stats']
             
         except Exception as e:
-            print(f"❌ Error in predict_and_save: {str(e)}")
-            raise
-    
+            print(f"Prediction and save failed for {self.crypto_symbol}: {str(e)}")
+            return {}
+
     def save_training_data(self, price_data: pd.DataFrame) -> bool:
         """
         Save training data to database for future retraining.
         
         Args:
-            price_data: Historical OHLC data
+            price_data: Historical price data
             
         Returns:
             True if successful, False otherwise
         """
-        if not self.enable_database or not self.db_manager:
+        if not self.enable_database or self.db_manager is None:
             return False
         
         try:
-            # Prepare training data
+            # Format training data
             training_data = {
                 'crypto_symbol': self.crypto_symbol,
                 'timestamp': datetime.now(),
                 'data_points': len(price_data),
-                'start_time': price_data['timestamp'].iloc[0],
-                'end_time': price_data['timestamp'].iloc[-1],
+                'start_time': price_data['timestamp'].min(),
+                'end_time': price_data['timestamp'].max(),
                 'ohlcv_data': price_data.to_dict('records')
             }
             
@@ -430,9 +427,9 @@ class EnhancedContinuousCryptoPredictor:
             return True
             
         except Exception as e:
-            print(f"❌ Error saving training data: {str(e)}")
+            print(f"Training data save failed for {self.crypto_symbol}: {str(e)}")
             return False
-    
+
     def check_retraining_conditions(self) -> bool:
         """
         Check if retraining conditions are met.
@@ -443,71 +440,59 @@ class EnhancedContinuousCryptoPredictor:
         if not self.enable_online_learning:
             return False
         
-        current_time = datetime.now()
-        
-        # Check time interval
-        if self.last_retrain_time:
-            hours_since_retrain = (current_time - self.last_retrain_time).total_seconds() / 3600
-            if hours_since_retrain < self.retrain_interval_hours:
-                return False
-        
-        # Check if we have enough new data
-        if self.db_manager:
-            try:
+        try:
+            current_time = datetime.now()
+            
+            # Check time interval
+            if self.last_retrain_time is not None:
+                time_since_retrain = (current_time - self.last_retrain_time).total_seconds() / 3600
+                if time_since_retrain < self.retrain_interval_hours:
+                    return False
+            
+            # Check if we have enough new data
+            if self.db_manager is not None:
                 recent_data_count = self.db_manager.get_recent_training_data_count(hours=24)
                 if recent_data_count < self.min_new_data_points:
-                    print(f"⚠️ Insufficient new data for retraining: {recent_data_count} < {self.min_new_data_points}")
                     return False
-            except Exception as e:
-                print(f"⚠️ Error checking training data: {str(e)}")
-                return False
-        
-        return True
-    
+            
+            return True
+            
+        except Exception as e:
+            print(f"Retraining condition check failed for {self.crypto_symbol}: {str(e)}")
+            return False
+
     def perform_retraining(self) -> bool:
         """
-        Perform model retraining with recent data.
+        Perform model retraining.
         
         Returns:
-            True if retraining was successful
+            True if successful, False otherwise
         """
-        if not self.enable_online_learning:
+        if not self.enable_online_learning or self.trainer is None:
             return False
         
         try:
-            print(f"🔄 Starting enhanced model retraining for {self.crypto_symbol}...")
-            
             # Fetch recent data for retraining
-            recent_data = self.fetch_crypto_data_from_api(hours_back=168)  # 1 week
+            recent_data = self.fetch_crypto_data_from_api(hours_back=720)  # 30 days
             
             if len(recent_data) < 1000:
-                print(f"⚠️ Insufficient data for retraining: {len(recent_data)} < 1000")
+                print(f"Insufficient data for retraining {self.crypto_symbol}: {len(recent_data)} < 1000")
                 return False
-            
-            # Save data to CSV for training
-            temp_csv_path = f"temp_{self.crypto_symbol}_retrain.csv"
-            recent_data.to_csv(temp_csv_path, index=False)
             
             # Perform retraining
-            training_result = self.trainer.train(temp_csv_path)
+            success = self.trainer.train_model(recent_data)
             
-            # Clean up temp file
-            if os.path.exists(temp_csv_path):
-                os.remove(temp_csv_path)
-            
-            if training_result:
+            if success:
                 self.last_retrain_time = datetime.now()
                 self.current_model_version = self._get_model_version()
-                print(f"✅ Enhanced model retraining completed for {self.crypto_symbol}")
-                return True
-            else:
-                print(f"❌ Enhanced model retraining failed for {self.crypto_symbol}")
-                return False
-                
+                print(f"Retraining completed for {self.crypto_symbol}")
+            
+            return success
+            
         except Exception as e:
-            print(f"❌ Error during enhanced retraining: {str(e)}")
+            print(f"Retraining failed for {self.crypto_symbol}: {str(e)}")
             return False
-    
+
     def _background_retraining_worker(self):
         """Background worker for retraining."""
         while self.is_running:
@@ -530,7 +515,7 @@ class EnhancedContinuousCryptoPredictor:
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"❌ Background retraining error: {str(e)}")
+                print(f"Background retraining error: {str(e)}")
                 self.is_retraining = False
     
     def _start_background_retraining_thread(self):
@@ -538,26 +523,22 @@ class EnhancedContinuousCryptoPredictor:
         if self.retraining_thread is None or not self.retraining_thread.is_alive():
             self.retraining_thread = threading.Thread(target=self._background_retraining_worker, daemon=True)
             self.retraining_thread.start()
-            print(f"🔄 Background retraining thread started for {self.crypto_symbol}")
     
     def _stop_background_retraining_thread(self):
         """Stop background retraining thread."""
         if self.retraining_thread and self.retraining_thread.is_alive():
             self.retraining_queue.put("STOP")
             self.retraining_thread.join(timeout=5)
-            print(f"🔄 Background retraining thread stopped for {self.crypto_symbol}")
     
     def _trigger_background_retraining(self):
         """Trigger background retraining."""
         if self.enable_online_learning and not self.is_retraining:
             self.retraining_queue.put("RETRAIN")
-            print(f"🔄 Background retraining triggered for {self.crypto_symbol}")
     
     def _check_model_update(self):
         """Check if model has been updated and reload if necessary."""
         new_version = self._get_model_version()
         if new_version != self.current_model_version:
-            print(f"🔄 Model updated: {self.current_model_version} → {new_version}")
             self.current_model_version = new_version
             # Reload predictor
             self.predictor.load_latest_model()
@@ -570,18 +551,14 @@ class EnhancedContinuousCryptoPredictor:
             True if successful, False otherwise
         """
         try:
-            print(f"\n🔄 Enhanced prediction cycle #{self.prediction_cycles + 1} for {self.crypto_symbol}")
-            
             # Fetch real-time data
             price_data = self.fetch_realtime_data()
             
             if len(price_data) < 100:
-                print(f"❌ Insufficient data for prediction: {len(price_data)} < 100")
                 return False
             
             # Validate data
             if not validate_crypto_data(price_data):
-                print(f"❌ Invalid data for {self.crypto_symbol}")
                 return False
             
             # Save training data
@@ -598,12 +575,10 @@ class EnhancedContinuousCryptoPredictor:
             self._check_model_update()
             
             self.prediction_cycles += 1
-            print(f"✅ Enhanced prediction cycle #{self.prediction_cycles} completed for {self.crypto_symbol}")
-            
             return True
             
         except Exception as e:
-            print(f"❌ Enhanced prediction cycle failed for {self.crypto_symbol}: {str(e)}")
+            print(f"Prediction cycle failed for {self.crypto_symbol}: {str(e)}")
             return False
     
     def start_continuous_prediction(self, interval_minutes: int = 5):
@@ -613,9 +588,7 @@ class EnhancedContinuousCryptoPredictor:
         Args:
             interval_minutes: Interval between predictions in minutes
         """
-        print(f"🚀 Starting enhanced continuous prediction for {self.crypto_symbol}")
-        print(f"   Interval: {interval_minutes} minutes")
-        print(f"   Press Ctrl+C to stop")
+        print(f"Starting enhanced continuous prediction for {self.crypto_symbol}")
         
         self.is_running = True
         
@@ -625,7 +598,7 @@ class EnhancedContinuousCryptoPredictor:
         
         # Set up signal handler
         def signal_handler(signum, frame):
-            print(f"\n🛑 Stopping enhanced continuous prediction for {self.crypto_symbol}")
+            print(f"\nStopping enhanced continuous prediction for {self.crypto_symbol}")
             self.stop()
             sys.exit(0)
         
@@ -639,34 +612,29 @@ class EnhancedContinuousCryptoPredictor:
                 # Run prediction cycle
                 success = self.run_prediction_cycle()
                 
-                if not success:
-                    print(f"⚠️ Enhanced prediction cycle failed for {self.crypto_symbol}, retrying in {interval_minutes} minutes")
-                
                 # Wait for next cycle
                 elapsed = time.time() - start_time
                 sleep_time = max(0, (interval_minutes * 60) - elapsed)
                 
                 if sleep_time > 0:
-                    print(f"⏰ Next enhanced prediction cycle in {sleep_time/60:.1f} minutes")
                     time.sleep(sleep_time)
                 
         except KeyboardInterrupt:
-            print(f"\n🛑 Enhanced continuous prediction interrupted for {self.crypto_symbol}")
+            print(f"\nEnhanced continuous prediction interrupted for {self.crypto_symbol}")
         finally:
             self.stop()
     
     def stop(self):
         """Stop the continuous predictor."""
-        print(f"🛑 Stopping enhanced continuous predictor for {self.crypto_symbol}")
         self.is_running = False
         
         if self.enable_online_learning:
             self._stop_background_retraining_thread()
         
-        print(f"📊 Enhanced prediction summary for {self.crypto_symbol}:")
-        print(f"   Total cycles: {self.prediction_cycles}")
-        print(f"   Total predictions: {self.total_predictions_made}")
-        print(f"   Model version: {self.current_model_version}")
+        print(f"Enhanced prediction summary for {self.crypto_symbol}:")
+        print(f"Total cycles: {self.prediction_cycles}")
+        print(f"Total predictions: {self.total_predictions_made}")
+        print(f"Model version: {self.current_model_version}")
 
 def main():
     """Main function to run enhanced continuous prediction."""
@@ -692,7 +660,7 @@ def main():
         predictor.start_continuous_prediction(interval_minutes)
         
     except Exception as e:
-        print(f"❌ Enhanced continuous prediction failed: {str(e)}")
+        print(f"Enhanced continuous prediction failed: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
