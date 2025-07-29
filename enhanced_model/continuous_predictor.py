@@ -63,6 +63,10 @@ class EnhancedContinuousCryptoPredictor:
         self.config = config  # Store config as instance variable
         self.predictor = EnhancedRealTimeVolatilityPredictor(config, crypto_symbol=self.crypto_symbol)
         
+        # Load the model immediately
+        if not self.predictor.load_latest_model():
+            raise ValueError(f"Failed to load enhanced model for {self.crypto_symbol}. Please train the model first.")
+        
         # Database configuration
         self.enable_database = os.getenv('ENABLE_DATABASE', 'true').lower() == 'true'
         self.enable_online_learning = os.getenv('ENABLE_ONLINE_LEARNING', 'true').lower() == 'true'
