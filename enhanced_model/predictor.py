@@ -61,9 +61,28 @@ class EnhancedRealTimeVolatilityPredictor:
                 print(f"Enhanced feature engineer not found: {feature_engineer_path}")
                 return False
             
-            # Load model
+            # Load checkpoint first to get feature count
             checkpoint = torch.load(model_path, map_location=self.device)
-            self.model = create_enhanced_model(self.config)
+            
+            # Get feature and target columns from checkpoint
+            self.feature_cols = checkpoint['feature_cols']
+            self.target_cols = checkpoint['target_cols']
+            
+            # Create model with correct input size based on actual features
+            actual_input_size = len(self.feature_cols)
+            print(f"Creating model with input size: {actual_input_size} (from {len(self.feature_cols)} features)")
+            
+            # Create model with dynamic input size
+            self.model = EnhancedVolatilityModel(
+                input_size=actual_input_size,
+                hidden_size=self.config.HIDDEN_SIZE,
+                num_layers=self.config.NUM_LAYERS,
+                num_heads=8,
+                dropout=self.config.DROPOUT,
+                num_quantiles=5
+            )
+            
+            # Load model state
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.model.to(self.device)
             self.model.eval()
@@ -72,15 +91,12 @@ class EnhancedRealTimeVolatilityPredictor:
             with open(feature_engineer_path, 'rb') as f:
                 self.feature_engineer = pickle.load(f)
             
-            # Get feature and target columns
-            self.feature_cols = checkpoint['feature_cols']
-            self.target_cols = checkpoint['target_cols']
-            
             self.is_loaded = True
             print(f"✅ Enhanced model loaded successfully")
             print(f"   Model epoch: {checkpoint['epoch']}")
             print(f"   Features: {len(self.feature_cols)}")
             print(f"   Targets: {len(self.target_cols)}")
+            print(f"   Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
             
             return True
             
