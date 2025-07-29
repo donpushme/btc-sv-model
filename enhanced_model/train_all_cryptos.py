@@ -8,29 +8,29 @@ using the enhanced model architecture optimized for Monte Carlo simulation.
 
 import os
 import sys
-from config import EnhancedConfig
-from trainer import EnhancedCryptoVolatilityTrainer
+from config import RealisticConfig
+from trainer import RealisticModelTrainer
 
 def train_all_enhanced_models():
     """
     Train enhanced models for all supported cryptocurrencies.
     """
-    print("🚀 Enhanced Training for All Cryptocurrencies")
+    print("🚀 Realistic Enhanced Training for All Cryptocurrencies")
     print("=" * 60)
     
-    config = EnhancedConfig()
+    config = RealisticConfig()
     results = {}
     
-    for crypto_symbol in EnhancedConfig.SUPPORTED_CRYPTOS.keys():
+    for crypto_symbol in RealisticConfig.SUPPORTED_CRYPTOS.keys():
         print(f"\n📊 Training enhanced model for {crypto_symbol}...")
         print("-" * 40)
         
         try:
             # Initialize trainer
-            trainer = EnhancedCryptoVolatilityTrainer(config, crypto_symbol)
+            trainer = RealisticModelTrainer(config, crypto_symbol)
             
             # Get data path
-            data_file = EnhancedConfig.SUPPORTED_CRYPTOS[crypto_symbol]['data_file']
+            data_file = RealisticConfig.SUPPORTED_CRYPTOS[crypto_symbol]['data_file']
             csv_path = os.path.join(config.DATA_PATH, data_file)
             
             # Check if data file exists
@@ -59,7 +59,7 @@ def train_all_enhanced_models():
     print("=" * 60)
     
     successful_training = 0
-    total_cryptos = len(EnhancedConfig.SUPPORTED_CRYPTOS)
+    total_cryptos = len(RealisticConfig.SUPPORTED_CRYPTOS)
     
     for crypto_symbol, result in results.items():
         if 'error' in result:
@@ -79,16 +79,16 @@ def train_all_enhanced_models():
 
 def main():
     """Main function."""
-    print("Enhanced Monte Carlo Model Training")
-    print("This will train enhanced models for all supported cryptocurrencies.")
+    print("Realistic Enhanced Model Training")
+    print("This will train realistic enhanced models for all supported cryptocurrencies.")
     print("Models will be saved in the root models directory.")
     print("Training data will be read from the root training_data directory.")
     
     # Check if training data exists
-    config = EnhancedConfig()
+    config = RealisticConfig()
     missing_data = []
     
-    for crypto_symbol, crypto_config in EnhancedConfig.SUPPORTED_CRYPTOS.items():
+    for crypto_symbol, crypto_config in RealisticConfig.SUPPORTED_CRYPTOS.items():
         data_file = crypto_config['data_file']
         csv_path = os.path.join(config.DATA_PATH, data_file)
         
@@ -107,7 +107,7 @@ def main():
     
     # Save results summary
     import json
-    summary_path = os.path.join(config.RESULTS_PATH, "enhanced_training_summary.json")
+    summary_path = os.path.join(config.RESULTS_PATH, "realistic_training_summary.json")
     with open(summary_path, 'w') as f:
         json.dump(results, f, indent=2)
     
