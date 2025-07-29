@@ -136,17 +136,19 @@ class RealisticModelTrainer:
         )
         
         # Extract time features for the sequences
-        time_features = self.extract_time_features(df, X.shape[0])
+        time_features = self.extract_time_features(df_transformed, X.shape[0])
         
         # Create train-validation split
         if time_features is not None:
-            X_train, X_val, y_train, y_val, time_train, time_val = create_train_val_split(
+            result = create_train_val_split(
                 X, y, time_features, self.config.VALIDATION_SPLIT
             )
+            X_train, X_val, y_train, y_val, time_train, time_val = result
         else:
-            X_train, X_val, y_train, y_val = create_train_val_split(
+            result = create_train_val_split(
                 X, y, validation_split=self.config.VALIDATION_SPLIT
             )
+            X_train, X_val, y_train, y_val = result
             time_train, time_val = None, None
         
         print(f"✅ Training data prepared:")
