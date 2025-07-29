@@ -49,9 +49,9 @@ class EnhancedRealTimeVolatilityPredictor:
             True if model loaded successfully, False otherwise
         """
         try:
-            # Look for enhanced model (without 'enhanced_' prefix)
-            model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_model.pth")
-            feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer.pkl")
+            # Look for enhanced model (with 'enhanced_' prefix)
+            model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_model.pth")
+            feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_feature_engineer.pkl")
             
             if not os.path.exists(model_path):
                 print(f"Enhanced model not found: {model_path}")
