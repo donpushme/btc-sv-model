@@ -39,6 +39,11 @@ class Config:
     
     # Data parameters
     SEQUENCE_LENGTH = 144  # 12 hours of 5-minute intervals for context
+    # Alternative sequence lengths:
+    # SEQUENCE_LENGTH = 288  # 24 hours (1 day) of 5-minute intervals
+    # SEQUENCE_LENGTH = 576  # 48 hours (2 days) of 5-minute intervals
+    # SEQUENCE_LENGTH = 1008 # 84 hours (3.5 days) of 5-minute intervals
+    # SEQUENCE_LENGTH = 1440 # 120 hours (5 days) of 5-minute intervals
     PREDICTION_HORIZON = 288  # 24 hours of 5-minute intervals to predict
     INTERVAL_MINUTES = 5
     
@@ -88,7 +93,7 @@ class Config:
     
     # Retraining settings for limited data
     RETRAIN_WITH_LIMITED_DATA = os.getenv('RETRAIN_WITH_LIMITED_DATA', 'true').lower() == 'true'
-    RETRAIN_MIN_DATA_POINTS = int(os.getenv('RETRAIN_MIN_DATA_POINTS', '20'))  # Reduced from 50 to 20
+    RETRAIN_MIN_DATA_POINTS = int(os.getenv('RETRAIN_MIN_DATA_POINTS', '5'))  # Reduced from 20 to 5 for limited data
     RETRAIN_SMALL_WINDOWS = [4, 6, 12]  # Minimum 4 for kurtosis calculation
     RETRAIN_NORMAL_WINDOWS = [6, 12, 24, 48]  # Normal windows for sufficient data
     

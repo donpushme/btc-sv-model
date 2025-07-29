@@ -444,10 +444,10 @@ class CryptoVolatilityTrainer:
                 recent_df = df.tail(min_data_points).copy()
         
         # Check if we have enough data - reduced minimum requirements
-        if len(recent_df) < 20:
+        if len(recent_df) < 5:  # Reduced from 20 to 5 for retraining with limited data
             return {
                 'success': False,
-                'error': f'Insufficient data: {len(recent_df)} < 20 minimum required',
+                'error': f'Insufficient data: {len(recent_df)} < 5 minimum required',
                 'data_points': len(recent_df)
             }
         
@@ -502,11 +502,11 @@ class CryptoVolatilityTrainer:
                 'data_points': 0
             }
         
-        if len(recent_df) < 10:
-            print(f"❌ Insufficient data after preprocessing: {len(recent_df)} < 10 minimum required")
+        if len(recent_df) < 3:  # Reduced from 10 to 3 for retraining with very limited data
+            print(f"❌ Insufficient data after preprocessing: {len(recent_df)} < 3 minimum required")
             return {
                 'success': False,
-                'error': f'Insufficient data after preprocessing: {len(recent_df)} < 10 minimum required',
+                'error': f'Insufficient data after preprocessing: {len(recent_df)} < 3 minimum required',
                 'data_points': len(recent_df)
             }
         
@@ -537,11 +537,11 @@ class CryptoVolatilityTrainer:
         print(f"Recent data sequence shape: X={X.shape}, y={y.shape}")
         
         # Check if we have enough sequences
-        if len(X) < 20:
-            print(f"❌ Insufficient sequences for retraining: {len(X)} < 20 minimum required")
+        if len(X) < 5:  # Reduced from 20 to 5 for retraining with limited data
+            print(f"❌ Insufficient sequences for retraining: {len(X)} < 5 minimum required")
             return {
                 'success': False,
-                'error': f'Insufficient sequences: {len(X)} < 20 minimum required',
+                'error': f'Insufficient sequences: {len(X)} < 5 minimum required',
                 'data_points': len(X)
             }
         

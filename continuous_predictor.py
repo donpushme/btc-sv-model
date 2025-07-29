@@ -643,9 +643,9 @@ class ContinuousCryptoPredictor:
             if len(training_data) < min_data_points:
                 print(f"⚠️ Limited training data: {len(training_data)} < {min_data_points}")
             
-            # Additional check for minimum data requirements - reduced from 50 to 20
-            if len(training_data) < 20:
-                print(f"⚠️ Very limited training data: {len(training_data)} < 20 minimum for retraining")
+            # Additional check for minimum data requirements - reduced from 50 to 5
+            if len(training_data) < 5:  # Reduced from 20 to 5 for retraining with limited data
+                print(f"⚠️ Very limited training data: {len(training_data)} < 5 minimum for retraining")
                 return False
             
             # Save training data to temporary CSV for trainer
