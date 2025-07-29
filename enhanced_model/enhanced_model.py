@@ -190,15 +190,17 @@ class EnhancedVolatilityModel(nn.Module):
         quantile_predictions = []
         for head in self.quantile_heads:
             quantile_pred = head(pooled)
-            quantile_pred[:, 0] = F.softplus(quantile_pred[:, 0])  # Volatility
-            quantile_pred[:, 1] = torch.tanh(quantile_pred[:, 1]) * 2.0  # Skewness
-            quantile_pred[:, 2] = F.softplus(quantile_pred[:, 2]) * 10.0  # Kurtosis
-            quantile_predictions.append(quantile_pred)
+            # Create new tensors instead of in-place modifications
+            vol_pred = F.softplus(quantile_pred[:, 0])  # Volatility
+            skew_pred = torch.tanh(quantile_pred[:, 1]) * 2.0  # Skewness
+            kurt_pred = F.softplus(quantile_pred[:, 2]) * 10.0  # Kurtosis
+            quantile_pred_processed = torch.stack([vol_pred, skew_pred, kurt_pred], dim=1)
+            quantile_predictions.append(quantile_pred_processed)
         
         # Uncertainty quantification
         uncertainty = F.softplus(self.uncertainty_head(pooled))
         
-        # Combine predictions
+        # Combine predictions - ensure proper shapes
         point_predictions = torch.cat([volatility, skewness, kurtosis], dim=1)
         
         return {
