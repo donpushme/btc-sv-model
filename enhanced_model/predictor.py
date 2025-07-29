@@ -153,14 +153,16 @@ class EnhancedRealTimeVolatilityPredictor:
         
         try:
             # Preprocess data using the provided DataFrame directly
+            # Create a temporary processor that doesn't try to load from file
             processor = EnhancedCryptoDataProcessor("", self.crypto_symbol)
             processor.df = price_data.copy()  # Use provided data directly
             
-            # Preprocess the data
-            df = processor.preprocess_data(
-                return_windows=self.config.RETURN_WINDOWS,
-                prediction_horizon=self.config.PREDICTION_HORIZON
-            )
+            # Skip the load_data step since we already have the data
+            # Preprocess the data directly
+            df = processor.calculate_returns(processor.df)
+            df = processor.add_time_features(df)
+            df = processor.calculate_rolling_statistics(df, self.config.RETURN_WINDOWS)
+            df = processor.calculate_target_statistics(df, self.config.PREDICTION_HORIZON)
             
             # Add features
             df = self.feature_engineer.engineer_features(df)
