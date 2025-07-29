@@ -293,14 +293,81 @@ class EnhancedContinuousCryptoPredictor:
             
             current_price = current_price_info['price']
             
-            # Use the full dataset for prediction instead of just the last 100 points
-            # This ensures we have enough data for the full prediction horizon
-            full_data = price_data.copy()
+            # OPTIMIZATION: Do data preprocessing once and reuse for all predictions
+            print(f"Preprocessing data for {self.crypto_symbol} (this will be reused for all 288 predictions)...")
             
-            # Generate 288 predictions with varying parameters
+            # Create a temporary processor and do preprocessing once
+            processor = EnhancedCryptoDataProcessor("", self.crypto_symbol)
+            processor.df = price_data.copy()
+            
+            # Preprocess the data once
+            df = processor.calculate_returns(processor.df)
+            df = processor.add_time_features(df)
+            df = processor.calculate_rolling_statistics(df, self.config.RETURN_WINDOWS)
+            df = processor.calculate_target_statistics(df, self.config.PREDICTION_HORIZON)
+            
+            # Add features once
+            df = self.predictor.feature_engineer.engineer_features(df)
+            
+            # Remove NaN values
+            df = df.dropna().reset_index(drop=True)
+            
+            # Handle feature mismatches once
+            available_features = set(df.columns)
+            expected_features = set(self.predictor.feature_cols)
+            missing_features = expected_features - available_features
+            
+            if missing_features:
+                print(f"Creating missing features for {self.crypto_symbol}: {missing_features}")
+                for feature in missing_features:
+                    if feature.startswith('realized_vol_'):
+                        df[feature] = df['log_return'].std()
+                    else:
+                        df[feature] = 0.0
+            
+            # Ensure we have all required features
+            df_features = df[self.predictor.feature_cols].copy()
+            
+            # Handle sequence length once
+            available_data = len(df)
+            required_sequence_length = self.config.SEQUENCE_LENGTH
+            
+            if available_data < required_sequence_length:
+                adaptive_sequence_length = max(24, min(available_data - 1, required_sequence_length))
+                print(f"Limited data ({available_data} points). Using adaptive sequence length: {adaptive_sequence_length}")
+                required_sequence_length = adaptive_sequence_length
+            
+            if len(df) < required_sequence_length:
+                raise ValueError(f"Insufficient data: {len(df)} < {required_sequence_length}")
+            
+            # Get the last sequence once
+            last_sequence = df_features.iloc[-required_sequence_length:].values
+            
+            # Transform features once
+            last_sequence_scaled = self.predictor.feature_engineer.feature_scaler.transform(last_sequence)
+            
+            # Prepare input tensor once
+            X = torch.FloatTensor(last_sequence_scaled).unsqueeze(0).to(self.predictor.device)
+            
+            print(f"Data preprocessing complete. Generating 288 predictions for {self.crypto_symbol}...")
+            
+            # Generate 288 predictions with varying parameters (reusing preprocessed data)
             for i in range(288):
-                # Make individual prediction using the full dataset
-                individual_prediction = self.predictor.predict_next_period(full_data, current_price)
+                # Make prediction using the preprocessed data
+                with torch.no_grad():
+                    model_predictions = self.predictor.model(X)
+                
+                # Extract point predictions
+                point_predictions = model_predictions['point_predictions'].cpu().numpy()[0]
+                uncertainty = model_predictions['uncertainty'].cpu().numpy()[0]
+                
+                # Inverse transform targets
+                targets_original = self.predictor.feature_engineer.inverse_transform_targets(point_predictions.reshape(1, -1))[0]
+                
+                # Apply bounds
+                volatility = np.clip(targets_original[0], 0.001, 0.1)
+                skewness = np.clip(targets_original[1], -2.0, 2.0)
+                kurtosis = np.clip(targets_original[2], -1.0, 10.0)
                 
                 # Apply time-varying multipliers for more realistic variation
                 time_factor = 1.0 + (i / 288) * 0.2  # Gradual increase over time
@@ -309,14 +376,14 @@ class EnhancedContinuousCryptoPredictor:
                 kurtosis_factor = 1.0 + (i % 48) * 0.01  # Longer cycle
                 
                 # Calculate adjusted predictions
-                adjusted_volatility = individual_prediction['predicted_volatility'] * volatility_factor * time_factor
-                adjusted_skewness = individual_prediction['predicted_skewness'] * skewness_factor
-                adjusted_kurtosis = individual_prediction['predicted_kurtosis'] * kurtosis_factor
+                adjusted_volatility = volatility * volatility_factor * time_factor
+                adjusted_skewness = skewness * skewness_factor
+                adjusted_kurtosis = kurtosis * kurtosis_factor
                 
                 # Ensure reasonable bounds
-                adjusted_volatility = max(min(adjusted_volatility, 0.5), 0.001)  # 0.1% to 50%
-                adjusted_skewness = max(min(adjusted_skewness, 2.0), -2.0)  # -2 to +2
-                adjusted_kurtosis = max(min(adjusted_kurtosis, 10.0), -1.0)  # -1 to +10 (excess kurtosis)
+                adjusted_volatility = max(min(adjusted_volatility, 0.5), 0.001)
+                adjusted_skewness = max(min(adjusted_skewness, 2.0), -2.0)
+                adjusted_kurtosis = max(min(adjusted_kurtosis, 10.0), -1.0)
                 
                 # Calculate future timestamp
                 future_time = datetime.now() + timedelta(minutes=5 * (i + 1))
@@ -328,7 +395,7 @@ class EnhancedContinuousCryptoPredictor:
                     'predicted_kurtosis': adjusted_kurtosis,
                     'current_price': current_price,
                     'prediction_horizon_minutes': (i + 1) * 5,
-                    'confidence': individual_prediction.get('confidence', 0.8)
+                    'confidence': 0.8 if available_data >= self.config.SEQUENCE_LENGTH else 0.6
                 }
                 
                 predictions.append(prediction)
@@ -352,6 +419,8 @@ class EnhancedContinuousCryptoPredictor:
                 'min_kurtosis': np.min(kurtoses),
                 'max_kurtosis': np.max(kurtoses)
             }
+            
+            print(f"Generated 288 predictions for {self.crypto_symbol}")
             
             return {
                 'predictions': predictions,
