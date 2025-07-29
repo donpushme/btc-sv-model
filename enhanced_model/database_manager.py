@@ -39,10 +39,10 @@ class DatabaseManager:
             self.db = self.client[database_name]
             
             # Create collections
-            self.predictions_collection = self.db[f"{crypto_symbol.lower()}_enhanced_predictions"
-            self.training_data_collection = self.db[f"{crypto_symbol.lower()}_enhanced_training_data"
-            self.models_collection = self.db[f"{crypto_symbol.lower()}_enhanced_models"
-            self.performance_collection = self.db[f"{crypto_symbol.lower()}_enhanced_performance"
+            self.predictions_collection = self.db[f"{crypto_symbol.lower()}_enhanced_predictions"]
+            self.training_data_collection = self.db[f"{crypto_symbol.lower()}_enhanced_training_data"]
+            self.models_collection = self.db[f"{crypto_symbol.lower()}_enhanced_models"]
+            self.performance_collection = self.db[f"{crypto_symbol.lower()}_enhanced_performance"]
             
             # Create indexes
             self._create_indexes()
