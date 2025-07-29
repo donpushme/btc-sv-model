@@ -18,6 +18,7 @@ import numpy as np
 import requests
 import threading
 import queue
+import torch
 from datetime import datetime, timedelta
 from typing import Dict, List
 from dotenv import load_dotenv
@@ -59,6 +60,7 @@ class EnhancedContinuousCryptoPredictor:
         
         # Initialize enhanced predictor
         config = EnhancedConfig()
+        self.config = config  # Store config as instance variable
         self.predictor = EnhancedRealTimeVolatilityPredictor(config, crypto_symbol=self.crypto_symbol)
         
         # Database configuration
@@ -705,14 +707,8 @@ class EnhancedContinuousCryptoPredictor:
         if self.enable_online_learning:
             self._start_background_retraining_thread()
         
-        # Set up signal handler
-        def signal_handler(signum, frame):
-            print(f"\nStopping enhanced continuous prediction for {self.crypto_symbol}")
-            self.stop()
-            sys.exit(0)
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        # Note: Signal handling is managed by the orchestrator, not individual predictors
+        # to avoid conflicts
         
         try:
             while self.is_running:
@@ -721,12 +717,17 @@ class EnhancedContinuousCryptoPredictor:
                 # Run prediction cycle
                 success = self.run_prediction_cycle()
                 
-                # Wait for next cycle
+                # Wait for next cycle with shorter sleep intervals for faster response
                 elapsed = time.time() - start_time
                 sleep_time = max(0, (interval_minutes * 60) - elapsed)
                 
                 if sleep_time > 0:
-                    time.sleep(sleep_time)
+                    # Sleep in smaller chunks to check is_running more frequently
+                    chunk_size = 30  # Check every 30 seconds
+                    while sleep_time > 0 and self.is_running:
+                        sleep_chunk = min(chunk_size, sleep_time)
+                        time.sleep(sleep_chunk)
+                        sleep_time -= sleep_chunk
                 
         except KeyboardInterrupt:
             print(f"\nEnhanced continuous prediction interrupted for {self.crypto_symbol}")

@@ -214,7 +214,7 @@ class EnhancedMultiCryptoOrchestrator:
         
         # Set up signal handlers
         def signal_handler(signum, frame):
-            print(f"\nStopping enhanced orchestrator...")
+            print(f"\n🛑 Received signal {signum}. Stopping enhanced orchestrator...")
             self.stop()
             sys.exit(0)
         
@@ -248,12 +248,12 @@ class EnhancedMultiCryptoOrchestrator:
             
             print(f"Enhanced multi-crypto orchestrator started")
             
-            # Keep main thread alive
+            # Keep main thread alive with shorter sleep for faster Ctrl+C response
             while self.is_running:
-                time.sleep(60)  # Check every minute
+                time.sleep(5)  # Check every 5 seconds instead of 60
                 
         except KeyboardInterrupt:
-            print(f"\nEnhanced orchestrator interrupted")
+            print(f"\n🛑 Enhanced orchestrator interrupted by user")
         except Exception as e:
             print(f"Enhanced orchestrator error: {str(e)}")
         finally:
@@ -261,19 +261,32 @@ class EnhancedMultiCryptoOrchestrator:
     
     def stop(self):
         """Stop the enhanced multi-crypto orchestrator."""
-        print(f"Stopping enhanced multi-crypto orchestrator...")
+        print(f"🛑 Stopping enhanced multi-crypto orchestrator...")
         
         self.is_running = False
         
-        # Stop all threads
+        # Stop all predictors first
+        for crypto_symbol, predictor in self.predictors.items():
+            try:
+                if hasattr(predictor, 'stop'):
+                    print(f"Stopping {crypto_symbol} predictor...")
+                    predictor.stop()
+            except Exception as e:
+                print(f"Error stopping {crypto_symbol} predictor: {str(e)}")
+        
+        # Stop all threads with shorter timeout
+        print("Waiting for threads to finish...")
         for crypto_symbol, thread in self.threads.items():
             if thread.is_alive():
-                thread.join(timeout=30)
+                print(f"Stopping {crypto_symbol} thread...")
+                thread.join(timeout=10)  # Reduced from 30 to 10 seconds
+                if thread.is_alive():
+                    print(f"⚠️ {crypto_symbol} thread did not stop gracefully")
         
         # Print final statistics
         self._print_final_stats()
         
-        print(f"Enhanced multi-crypto orchestrator stopped")
+        print(f"✅ Enhanced multi-crypto orchestrator stopped")
     
     def _print_final_stats(self):
         """Print final statistics."""
