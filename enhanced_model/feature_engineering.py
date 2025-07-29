@@ -28,6 +28,7 @@ class EnhancedFeatureEngineer:
     def engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Engineer advanced features for enhanced prediction with robust NaN handling.
+        Only creates the features that the model expects to avoid feature mismatch.
         
         Args:
             df: Preprocessed DataFrame
@@ -37,17 +38,35 @@ class EnhancedFeatureEngineer:
         """
         print(f"Engineering features for dataset with {len(df)} rows...")
         
-        # Technical indicators
+        # Technical indicators (core features)
         df = self.add_technical_indicators(df)
         
-        # Volatility features
+        # Volatility features (core features)
         df = self.add_volatility_features(df)
         
-        # Market microstructure features
+        # Market microstructure features (core features)
         df = self.add_microstructure_features(df)
         
-        # Interaction features
-        df = self.add_interaction_features(df)
+        # Only add interaction features if they're expected by the model
+        # These are typically the most variable features between training runs
+        if 'vol_rsi_interaction' in df.columns or 'vol_macd_interaction' in df.columns:
+            # Interaction features already exist, don't recreate
+            pass
+        else:
+            # Add minimal interaction features
+            df = self.add_minimal_interaction_features(df)
+        
+        # Remove rolling statistics features that are not part of the core model features
+        # These are created by the data processor but may not be expected by the model
+        rolling_features_to_remove = []
+        for col in df.columns:
+            if any(pattern in col for pattern in ['volatility_', 'skewness_', 'kurtosis_', 'momentum_']):
+                if col not in ['realized_vol_6', 'realized_vol_12', 'realized_vol_24', 'realized_vol_48']:
+                    rolling_features_to_remove.append(col)
+        
+        if rolling_features_to_remove:
+            print(f"Removing extra rolling features: {rolling_features_to_remove}")
+            df = df.drop(columns=rolling_features_to_remove)
         
         # Aggressive NaN handling for limited data
         initial_rows = len(df)
@@ -239,6 +258,19 @@ class EnhancedFeatureEngineer:
         
         # Volume-volatility interactions
         df['volume_vol_interaction'] = df['volume_ratio'] * df['realized_vol_24']
+        
+        return df
+    
+    def add_minimal_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add minimal interaction features to avoid creating too many extra features.
+        """
+        # Only add the most essential interaction features
+        if 'realized_vol_24' in df.columns and 'rsi' in df.columns:
+            df['vol_rsi_interaction'] = df['realized_vol_24'] * df['rsi']
+        
+        if 'realized_vol_24' in df.columns and 'macd' in df.columns:
+            df['vol_macd_interaction'] = df['realized_vol_24'] * df['macd']
         
         return df
     
