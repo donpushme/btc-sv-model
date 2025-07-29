@@ -124,32 +124,34 @@ class EnhancedFeatureEngineer:
         """
         data_length = len(df)
         
-        # Adaptive windows based on data length
+        # Always create the expected features that the model was trained on
+        # Use adaptive windows but ensure all expected features exist
+        expected_windows = [6, 12, 24, 48]  # Always create these features
+        
+        # Realized volatility (ensure all expected features exist)
+        for window in expected_windows:
+            if data_length >= window:
+                df[f'realized_vol_{window}'] = df['log_return'].rolling(window=window).std()
+            else:
+                # Use overall std for limited data
+                df[f'realized_vol_{window}'] = df['log_return'].std()
+        
+        # Adaptive windows for other features
         if data_length < 100:
             # Very limited data - use small windows
-            windows = [3, 6, 12]
             parkinson_window = 12
             garman_window = 12
             vol_of_vol_window = 12
         elif data_length < 500:
             # Limited data - use medium windows
-            windows = [6, 12, 24]
             parkinson_window = 24
             garman_window = 24
             vol_of_vol_window = 24
         else:
             # Sufficient data - use full windows
-            windows = [6, 12, 24, 48]
             parkinson_window = 24
             garman_window = 24
             vol_of_vol_window = 48
-        
-        # Realized volatility (adaptive windows)
-        for window in windows:
-            if data_length >= window:
-                df[f'realized_vol_{window}'] = df['log_return'].rolling(window=window).std()
-            else:
-                df[f'realized_vol_{window}'] = df['log_return'].std()  # Use overall std
         
         # Parkinson volatility (adaptive window)
         if data_length >= parkinson_window:

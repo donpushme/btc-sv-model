@@ -170,6 +170,24 @@ class EnhancedRealTimeVolatilityPredictor:
             # Remove NaN values
             df = df.dropna().reset_index(drop=True)
             
+            # Debug: Check feature mismatch
+            available_features = set(df.columns)
+            expected_features = set(self.feature_cols)
+            missing_features = expected_features - available_features
+            extra_features = available_features - expected_features
+            
+            if missing_features:
+                print(f"Warning: Missing features: {missing_features}")
+                # Try to create missing features with default values
+                for feature in missing_features:
+                    if feature.startswith('realized_vol_'):
+                        df[feature] = df['log_return'].std()  # Use overall std
+                    else:
+                        df[feature] = 0.0  # Default value for other features
+            
+            if extra_features:
+                print(f"Warning: Extra features: {extra_features}")
+            
             # Handle limited data by adjusting sequence length
             available_data = len(df)
             required_sequence_length = self.config.SEQUENCE_LENGTH
@@ -183,8 +201,11 @@ class EnhancedRealTimeVolatilityPredictor:
             if len(df) < required_sequence_length:
                 raise ValueError(f"Insufficient data: {len(df)} < {required_sequence_length}")
             
+            # Ensure we have all required features
+            df_features = df[self.feature_cols].copy()
+            
             # Get the last sequence
-            last_sequence = df[self.feature_cols].iloc[-required_sequence_length:].values
+            last_sequence = df_features.iloc[-required_sequence_length:].values
             
             # Transform features
             last_sequence_scaled = self.feature_engineer.feature_scaler.transform(last_sequence)
