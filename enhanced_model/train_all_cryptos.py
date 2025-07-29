@@ -29,25 +29,33 @@ def train_all_enhanced_models():
             # Initialize trainer
             trainer = RealisticModelTrainer(config, crypto_symbol)
             
-            # Get data path
-            data_file = RealisticConfig.SUPPORTED_CRYPTOS[crypto_symbol]['data_file']
-            csv_path = os.path.join(config.DATA_PATH, data_file)
+
             
-            # Check if data file exists
-            if not os.path.exists(csv_path):
-                print(f"❌ Data file not found: {csv_path}")
-                results[crypto_symbol] = {'error': 'Data file not found'}
-                continue
+            # Load and preprocess data
+            df = trainer.load_and_preprocess_data()
+            
+            # Prepare training data
+            X_train, X_val, y_train, y_val, time_train, time_val, feature_cols = trainer.prepare_training_data(df)
             
             # Train model
-            training_results = trainer.train(csv_path)
+            trainer.train(X_train, X_val, y_train, y_val, time_train, time_val, feature_cols)
             
             print(f"✅ Enhanced training completed for {crypto_symbol}")
-            print(f"   Final validation loss: {training_results['final_val_loss']:.6f}")
-            print(f"   Best validation loss: {training_results['best_val_loss']:.6f}")
-            print(f"   Epochs trained: {training_results['epochs_trained']}")
             
-            results[crypto_symbol] = training_results
+            # Get training results from trainer history
+            final_val_loss = trainer.val_losses[-1] if trainer.val_losses else 0.0
+            best_val_loss = min(trainer.val_losses) if trainer.val_losses else 0.0
+            epochs_trained = len(trainer.train_losses)
+            
+            print(f"   Final validation loss: {final_val_loss:.6f}")
+            print(f"   Best validation loss: {best_val_loss:.6f}")
+            print(f"   Epochs trained: {epochs_trained}")
+            
+            results[crypto_symbol] = {
+                'final_val_loss': final_val_loss,
+                'best_val_loss': best_val_loss,
+                'epochs_trained': epochs_trained
+            }
             
         except Exception as e:
             print(f"❌ Error training enhanced {crypto_symbol} model: {str(e)}")
