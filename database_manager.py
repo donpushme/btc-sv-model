@@ -62,11 +62,11 @@ class DatabaseManager:
     
     def _init_collections(self):
         """Initialize collections and create indexes for the specific cryptocurrency."""
-        # Collection names - crypto-specific for predictions, shared for others
+        # Collection names - ALL crypto-specific
         self.predictions_collection = self.db[self.crypto_config['db_table']]
-        self.training_data_collection = self.db.training_data
-        self.models_collection = self.db.models
-        self.performance_collection = self.db.performance
+        self.training_data_collection = self.db[f"{self.crypto_symbol.lower()}_training_data"]
+        self.models_collection = self.db[f"{self.crypto_symbol.lower()}_models"]
+        self.performance_collection = self.db[f"{self.crypto_symbol.lower()}_performance"]
         
         # Create indexes for better query performance
         try:
