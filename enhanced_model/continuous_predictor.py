@@ -293,16 +293,14 @@ class EnhancedContinuousCryptoPredictor:
             
             current_price = current_price_info['price']
             
+            # Use the full dataset for prediction instead of just the last 100 points
+            # This ensures we have enough data for the full prediction horizon
+            full_data = price_data.copy()
+            
             # Generate 288 predictions with varying parameters
             for i in range(288):
-                # Create rolling data for individual prediction
-                if len(price_data) >= 100:
-                    rolling_data = price_data.tail(100).copy()
-                else:
-                    rolling_data = price_data.copy()
-                
-                # Make individual prediction
-                individual_prediction = self.predictor.predict_next_period(rolling_data, current_price)
+                # Make individual prediction using the full dataset
+                individual_prediction = self.predictor.predict_next_period(full_data, current_price)
                 
                 # Apply time-varying multipliers for more realistic variation
                 time_factor = 1.0 + (i / 288) * 0.2  # Gradual increase over time
