@@ -33,6 +33,21 @@ from utils import format_prediction_output, validate_crypto_data
 # Load environment variables
 load_dotenv()
 
+def convert_to_mongodb_compatible(obj):
+    """Convert numpy types and other objects to MongoDB-compatible types."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_to_mongodb_compatible(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_mongodb_compatible(item) for item in obj]
+    else:
+        return obj
+
 class EnhancedContinuousCryptoPredictor:
     """
     Enhanced continuous predictor that runs every 5 minutes generating 288 predictions each time.
@@ -459,17 +474,17 @@ class EnhancedContinuousCryptoPredictor:
             db_data = {
                 'crypto_symbol': self.crypto_symbol,
                 'timestamp': datetime.now(),
-                'current_price': prediction_result['current_price'],
-                'prediction_count': prediction_result['prediction_count'],
-                'summary_stats': prediction_result['summary_stats'],
+                'current_price': convert_to_mongodb_compatible(prediction_result['current_price']),
+                'prediction_count': convert_to_mongodb_compatible(prediction_result['prediction_count']),
+                'summary_stats': convert_to_mongodb_compatible(prediction_result['summary_stats']),
                 'predictions': [
                     {
                         'timestamp': p['timestamp'],
-                        'predicted_volatility': p['predicted_volatility'],
-                        'predicted_skewness': p['predicted_skewness'],
-                        'predicted_kurtosis': p['predicted_kurtosis'],
-                        'prediction_horizon_minutes': p['prediction_horizon_minutes'],
-                        'confidence': p['confidence']
+                        'predicted_volatility': convert_to_mongodb_compatible(p['predicted_volatility']),
+                        'predicted_skewness': convert_to_mongodb_compatible(p['predicted_skewness']),
+                        'predicted_kurtosis': convert_to_mongodb_compatible(p['predicted_kurtosis']),
+                        'prediction_horizon_minutes': convert_to_mongodb_compatible(p['prediction_horizon_minutes']),
+                        'confidence': convert_to_mongodb_compatible(p['confidence'])
                     }
                     for p in prediction_result['predictions']
                 ]
@@ -480,7 +495,10 @@ class EnhancedContinuousCryptoPredictor:
             return doc_id
             
         except Exception as e:
-            print(f"Database save failed for {self.crypto_symbol}: {str(e)}")
+            print(f"❌ Error saving prediction: {str(e)}")
+            print(f"Prediction result keys: {list(prediction_result.keys())}")
+            if 'summary_stats' in prediction_result:
+                print(f"Summary stats keys: {list(prediction_result['summary_stats'].keys())}")
             return None
 
     def predict_and_save(self, price_data: pd.DataFrame, save_to_db: bool = True) -> Dict[str, float]:
