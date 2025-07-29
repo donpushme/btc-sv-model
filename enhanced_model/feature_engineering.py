@@ -363,7 +363,7 @@ class EnhancedFeatureEngineer:
     def prepare_sequences(self, df: pd.DataFrame, feature_cols: List[str], 
                          target_cols: List[str], sequence_length: int) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Prepare sequences for LSTM training.
+        Prepare sequences for LSTM training using vectorized operations.
         
         Args:
             df: Transformed DataFrame
@@ -374,16 +374,28 @@ class EnhancedFeatureEngineer:
         Returns:
             Tuple of (X, y) arrays
         """
-        X, y = [], []
+        print(f"🔄 Creating sequences with {len(df)} rows and sequence length {sequence_length}...")
         
-        for i in range(sequence_length, len(df)):
-            # Input sequence
-            X.append(df[feature_cols].iloc[i-sequence_length:i].values)
-            
-            # Target (next period)
-            y.append(df[target_cols].iloc[i].values)
+        # Convert to numpy arrays for faster processing
+        feature_data = df[feature_cols].values
+        target_data = df[target_cols].values
         
-        return np.array(X), np.array(y)
+        # Calculate number of sequences
+        n_sequences = len(df) - sequence_length
+        
+        # Pre-allocate arrays
+        X = np.zeros((n_sequences, sequence_length, len(feature_cols)))
+        y = np.zeros((n_sequences, len(target_cols)))
+        
+        # Use vectorized operations to create sequences
+        for i in range(sequence_length):
+            X[:, i, :] = feature_data[i:n_sequences + i]
+        
+        # Set targets
+        y = target_data[sequence_length:]
+        
+        print(f"✅ Sequences created: X shape {X.shape}, y shape {y.shape}")
+        return X, y
 
 class EnhancedCryptoDataset(Dataset):
     """

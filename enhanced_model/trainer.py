@@ -127,16 +127,20 @@ class EnhancedCryptoVolatilityTrainer:
         print(f"✅ Split complete. Train: {X_train.shape}, Val: {X_val.shape}")
         
         # Create datasets and data loaders
-        print("📚 Creating datasets and data loaders...")
+        print("📚 Creating datasets...")
         train_dataset = EnhancedCryptoDataset(X_train, y_train)
+        print("✅ Train dataset created")
         val_dataset = EnhancedCryptoDataset(X_val, y_val)
+        print("✅ Val dataset created")
         
+        print("📚 Creating data loaders...")
         train_loader = DataLoader(
             train_dataset, 
             batch_size=self.config.BATCH_SIZE, 
             shuffle=True,
             num_workers=0
         )
+        print("✅ Train loader created")
         
         val_loader = DataLoader(
             val_dataset, 
@@ -144,6 +148,7 @@ class EnhancedCryptoVolatilityTrainer:
             shuffle=False,
             num_workers=0
         )
+        print("✅ Val loader created")
         
         print("✅ Data loaders created successfully")
         return train_loader, val_loader, feature_cols, target_cols
