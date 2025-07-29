@@ -26,6 +26,7 @@ from predictor import EnhancedRealTimeVolatilityPredictor
 from database_manager import DatabaseManager
 from trainer import EnhancedCryptoVolatilityTrainer
 from config import EnhancedConfig
+from data_processor import EnhancedCryptoDataProcessor
 from utils import format_prediction_output, validate_crypto_data
 
 # Load environment variables
