@@ -79,7 +79,7 @@ class DatabaseManager:
     
     def save_prediction(self, prediction_data: Dict[str, Any]) -> str:
         """
-        Save prediction results to database.
+        Save prediction results to database in the specified format.
         
         Args:
             prediction_data: Prediction data dictionary
@@ -88,12 +88,131 @@ class DatabaseManager:
             Database ID of saved prediction
         """
         try:
-            # Add metadata
-            prediction_data['crypto_symbol'] = self.crypto_symbol
-            prediction_data['created_at'] = datetime.now()
+            import time
+            from datetime import datetime
+            
+            # Generate batch ID
+            batch_id = f"continuous_{int(time.time())}"
+            
+            # Format the prediction data according to the specified structure
+            formatted_data = {
+                "prediction_timestamp": datetime.utcnow(),
+                "data_timestamp": prediction_data.get('data_timestamp', datetime.utcnow()),
+                "model_version": f"{self.crypto_symbol}_model",
+                "batch_id": batch_id,
+                "prediction_type": "continuous_batch",
+                "current_price": float(prediction_data.get('current_price', 0)),
+                "predictions_count": int(prediction_data.get('prediction_count', 0)),
+                "interval_minutes": 5,
+                "prediction_horizon_hours": 24,
+                "source": "Pyth Network",
+                "summary_stats": prediction_data.get('summary_stats', {}),
+                "predictions": [],
+                "crypto_symbol": self.crypto_symbol
+            }
+            
+            # Format individual predictions
+            if 'predictions' in prediction_data:
+                for i, pred in enumerate(prediction_data['predictions'], 1):
+                    # Parse timestamp
+                    pred_timestamp = pred.get('timestamp')
+                    if isinstance(pred_timestamp, str):
+                        from datetime import datetime
+                        try:
+                            pred_dt = datetime.fromisoformat(pred_timestamp.replace('Z', '+00:00'))
+                        except:
+                            pred_dt = datetime.utcnow()
+                    else:
+                        pred_dt = datetime.utcnow()
+                    
+                    # Calculate minutes ahead
+                    data_timestamp = formatted_data['data_timestamp']
+                    if isinstance(data_timestamp, str):
+                        try:
+                            data_dt = datetime.fromisoformat(data_timestamp.replace('Z', '+00:00'))
+                        except:
+                            data_dt = datetime.utcnow()
+                    else:
+                        data_dt = data_timestamp
+                    
+                    minutes_ahead = int((pred_dt - data_dt).total_seconds() / 60)
+                    
+                    # Calculate time-based features
+                    hour_utc = pred_dt.hour
+                    is_us_trading_hours = 9 <= hour_utc <= 16  # 9 AM to 4 PM UTC
+                    is_weekend = pred_dt.weekday() >= 5  # Saturday = 5, Sunday = 6
+                    
+                    # Calculate multipliers (simplified - you may want to adjust these)
+                    volatility_multiplier = 1.0 + (pred.get('predicted_volatility', 0) * 0.1)
+                    skewness_multiplier = 1.0 + (pred.get('predicted_skewness', 0) * 0.05)
+                    kurtosis_multiplier = 1.0 + (pred.get('predicted_kurtosis', 0) * 0.02)
+                    
+                    # Calculate confidence intervals (simplified)
+                    current_price = formatted_data['current_price']
+                    volatility = pred.get('predicted_volatility', 0)
+                    confidence_range = current_price * volatility * 2  # 2 standard deviations
+                    
+                    # Determine market regime and risk assessment
+                    volatility_val = pred.get('predicted_volatility', 0)
+                    skewness_val = pred.get('predicted_skewness', 0)
+                    kurtosis_val = pred.get('predicted_kurtosis', 0)
+                    
+                    if volatility_val > 0.08:
+                        if skewness_val > 1.5:
+                            market_regime = "high_volatility_skewed"
+                        else:
+                            market_regime = "high_volatility_normal"
+                    else:
+                        if skewness_val > 1.5:
+                            market_regime = "low_volatility_skewed"
+                        else:
+                            market_regime = "low_volatility_normal"
+                    
+                    if volatility_val > 0.1 or kurtosis_val > 8:
+                        risk_assessment = "very_high"
+                    elif volatility_val > 0.08 or kurtosis_val > 6:
+                        risk_assessment = "high"
+                    elif volatility_val > 0.06 or kurtosis_val > 4:
+                        risk_assessment = "medium"
+                    else:
+                        risk_assessment = "low"
+                    
+                    # Include both existing uncertainty fields and new format fields
+                    formatted_pred = {
+                        "sequence_number": i,
+                        "timestamp": pred_timestamp,
+                        "minutes_ahead": minutes_ahead,
+                        "predicted_volatility": float(pred.get('predicted_volatility', 0)),
+                        "predicted_skewness": float(pred.get('predicted_skewness', 0)),
+                        "predicted_kurtosis": float(pred.get('predicted_kurtosis', 0)),
+                        "volatility_annualized": float(pred.get('volatility_annualized', 0)),
+                        "volatility_multiplier": float(volatility_multiplier),
+                        "skewness_multiplier": float(skewness_multiplier),
+                        "kurtosis_multiplier": float(kurtosis_multiplier),
+                        "hour_utc": hour_utc,
+                        "is_us_trading_hours": is_us_trading_hours,
+                        "is_weekend": is_weekend,
+                        "current_price": float(current_price),
+                        "confidence_interval_lower": float(current_price - confidence_range),
+                        "confidence_interval_upper": float(current_price + confidence_range),
+                        "market_regime": market_regime,
+                        "risk_assessment": risk_assessment,
+                        "prediction_period": "5_minutes",
+                        "data_timestamp": formatted_data['data_timestamp'].isoformat() if hasattr(formatted_data['data_timestamp'], 'isoformat') else str(formatted_data['data_timestamp']),
+                        "model_version": formatted_data['model_version'],
+                        "prediction_type": "continuous_5min_varying",
+                        # Keep existing uncertainty fields for backward compatibility
+                        "uncertainty_volatility": float(pred.get('uncertainty_volatility', 0)),
+                        "uncertainty_skewness": float(pred.get('uncertainty_skewness', 0)),
+                        "uncertainty_kurtosis": float(pred.get('uncertainty_kurtosis', 0)),
+                        "confidence": float(pred.get('confidence', 0)),
+                        "prediction_horizon_minutes": int(pred.get('prediction_horizon_minutes', 0))
+                    }
+                    
+                    formatted_data['predictions'].append(formatted_pred)
             
             # Insert into database
-            result = self.predictions_collection.insert_one(prediction_data)
+            result = self.predictions_collection.insert_one(formatted_data)
             
             return str(result.inserted_id)
             

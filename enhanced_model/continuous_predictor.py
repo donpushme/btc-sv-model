@@ -314,6 +314,7 @@ class EnhancedContinuousCryptoPredictor:
                 raise ValueError("Failed to get current price")
             
             current_price = current_price_info['price']
+            data_timestamp = datetime.utcnow()  # Current time as data timestamp
             
             # OPTIMIZATION: Do data preprocessing once and reuse for all predictions
             print(f"Preprocessing data for {self.crypto_symbol} (this will be reused for all 288 predictions)...")
@@ -407,39 +408,63 @@ class EnhancedContinuousCryptoPredictor:
                 adjusted_skewness = max(min(adjusted_skewness, 2.0), -2.0)
                 adjusted_kurtosis = max(min(adjusted_kurtosis, 10.0), -1.0)
                 
+                # Calculate volatility annualized (convert 5-min volatility to annual)
+                volatility_annualized = adjusted_volatility * np.sqrt(12 * 24 * 365)  # 5-min to annual
+                
                 # Calculate future timestamp
                 future_time = datetime.now() + timedelta(minutes=5 * (i + 1))
                 
                 prediction = {
                     'timestamp': future_time,
+                    'data_timestamp': data_timestamp,
                     'predicted_volatility': adjusted_volatility,
                     'predicted_skewness': adjusted_skewness,
                     'predicted_kurtosis': adjusted_kurtosis,
+                    'volatility_annualized': volatility_annualized,
                     'current_price': current_price,
                     'prediction_horizon_minutes': (i + 1) * 5,
-                    'confidence': 0.8 if available_data >= self.config.SEQUENCE_LENGTH else 0.6
+                    'confidence': 0.8 if available_data >= self.config.SEQUENCE_LENGTH else 0.6,
+                    # Include uncertainty fields from the model
+                    'uncertainty_volatility': float(uncertainty[0]),
+                    'uncertainty_skewness': float(uncertainty[1]),
+                    'uncertainty_kurtosis': float(uncertainty[2])
                 }
                 
                 predictions.append(prediction)
             
-            # Calculate summary statistics
+            # Calculate summary statistics in the expected format
             volatilities = [p['predicted_volatility'] for p in predictions]
             skewnesses = [p['predicted_skewness'] for p in predictions]
             kurtoses = [p['predicted_kurtosis'] for p in predictions]
+            volatilities_annualized = [p['volatility_annualized'] for p in predictions]
             
             summary_stats = {
-                'mean_volatility': np.mean(volatilities),
-                'std_volatility': np.std(volatilities),
-                'min_volatility': np.min(volatilities),
-                'max_volatility': np.max(volatilities),
-                'mean_skewness': np.mean(skewnesses),
-                'std_skewness': np.std(skewnesses),
-                'min_skewness': np.min(skewnesses),
-                'max_skewness': np.max(skewnesses),
-                'mean_kurtosis': np.mean(kurtoses),
-                'std_kurtosis': np.std(kurtoses),
-                'min_kurtosis': np.min(kurtoses),
-                'max_kurtosis': np.max(kurtoses)
+                'volatility': {
+                    'min': float(np.min(volatilities)),
+                    'max': float(np.max(volatilities)),
+                    'mean': float(np.mean(volatilities)),
+                    'std': float(np.std(volatilities)),
+                    'range': float(np.max(volatilities) - np.min(volatilities))
+                },
+                'skewness': {
+                    'min': float(np.min(skewnesses)),
+                    'max': float(np.max(skewnesses)),
+                    'mean': float(np.mean(skewnesses)),
+                    'std': float(np.std(skewnesses)),
+                    'range': float(np.max(skewnesses) - np.min(skewnesses))
+                },
+                'kurtosis': {
+                    'min': float(np.min(kurtoses)),
+                    'max': float(np.max(kurtoses)),
+                    'mean': float(np.mean(kurtoses)),
+                    'std': float(np.std(kurtoses)),
+                    'range': float(np.max(kurtoses) - np.min(kurtoses))
+                },
+                'volatility_annualized': {
+                    'min': float(np.min(volatilities_annualized)),
+                    'max': float(np.max(volatilities_annualized)),
+                    'mean': float(np.mean(volatilities_annualized))
+                }
             }
             
             print(f"Generated 288 predictions for {self.crypto_symbol}")
@@ -470,10 +495,16 @@ class EnhancedContinuousCryptoPredictor:
             return None
         
         try:
+            # Get the data timestamp from the first prediction or use current time
+            data_timestamp = datetime.utcnow()
+            if prediction_result.get('predictions') and len(prediction_result['predictions']) > 0:
+                first_pred = prediction_result['predictions'][0]
+                if 'data_timestamp' in first_pred:
+                    data_timestamp = first_pred['data_timestamp']
+            
             # Format prediction data for database
             db_data = {
-                'crypto_symbol': self.crypto_symbol,
-                'timestamp': datetime.now(),
+                'data_timestamp': data_timestamp,
                 'current_price': convert_to_mongodb_compatible(prediction_result['current_price']),
                 'prediction_count': convert_to_mongodb_compatible(prediction_result['prediction_count']),
                 'summary_stats': convert_to_mongodb_compatible(prediction_result['summary_stats']),
@@ -483,8 +514,13 @@ class EnhancedContinuousCryptoPredictor:
                         'predicted_volatility': convert_to_mongodb_compatible(p['predicted_volatility']),
                         'predicted_skewness': convert_to_mongodb_compatible(p['predicted_skewness']),
                         'predicted_kurtosis': convert_to_mongodb_compatible(p['predicted_kurtosis']),
+                        'volatility_annualized': convert_to_mongodb_compatible(p.get('volatility_annualized', 0)),
                         'prediction_horizon_minutes': convert_to_mongodb_compatible(p['prediction_horizon_minutes']),
-                        'confidence': convert_to_mongodb_compatible(p['confidence'])
+                        'confidence': convert_to_mongodb_compatible(p.get('confidence', 0)),
+                        # Include uncertainty fields
+                        'uncertainty_volatility': convert_to_mongodb_compatible(p.get('uncertainty_volatility', 0)),
+                        'uncertainty_skewness': convert_to_mongodb_compatible(p.get('uncertainty_skewness', 0)),
+                        'uncertainty_kurtosis': convert_to_mongodb_compatible(p.get('uncertainty_kurtosis', 0))
                     }
                     for p in prediction_result['predictions']
                 ]
