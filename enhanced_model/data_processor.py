@@ -144,11 +144,13 @@ class EnhancedCryptoDataProcessor:
         
         # For limited data, use a much shorter prediction horizon
         available_data = len(df)
-        if available_data < prediction_horizon * 2:
+        if available_data < prediction_horizon + 100:  # Need at least horizon + 100 points for safety
             # If we have very limited data, use a much shorter horizon
             adaptive_horizon = max(6, min(available_data // 4, 24))  # Between 6 and 24 periods
             print(f"⚠️ Limited data ({available_data} points). Using adaptive prediction horizon: {adaptive_horizon}")
             prediction_horizon = adaptive_horizon
+        else:
+            print(f"✅ Sufficient data ({available_data} points). Using full prediction horizon: {prediction_horizon}")
         
         # Calculate targets for each time point
         # Use a more conservative approach for limited data

@@ -118,6 +118,7 @@ class EnhancedContinuousCryptoPredictor:
     def fetch_crypto_data_from_api(self, hours_back: int = 120) -> pd.DataFrame:
         """
         Fetch historical cryptocurrency data from Pyth Network API.
+        Uses chunked fetching to get more data than the API limit.
         
         Args:
             hours_back: Number of hours of historical data to fetch
@@ -126,42 +127,75 @@ class EnhancedContinuousCryptoPredictor:
             DataFrame with OHLCV data
         """
         try:
-            # Calculate timestamps
-            end_time = int(time.time())
-            start_time = end_time - (hours_back * 3600)
-            
-            # API parameters
-            params = {
-                'symbol': self.symbol,
-                'resolution': '5',  # 5-minute intervals
-                'from': start_time,
-                'to': end_time
-            }
-            
             print(f"📡 Fetching {self.crypto_symbol} data from Pyth Network...")
-            response = requests.get(self.api_base_url, params=params, timeout=30)
-            response.raise_for_status()
             
-            data = response.json()
+            all_data = []
+            current_time = int(time.time())
             
-            if data['s'] != 'ok':
-                raise Exception(f"API returned error status: {data['s']}")
+            # Fetch data in chunks of 100 hours to get around API limits
+            chunk_size_hours = 100
+            total_chunks = (hours_back + chunk_size_hours - 1) // chunk_size_hours
             
-            # Convert to DataFrame
-            df = pd.DataFrame({
-                'timestamp': pd.to_datetime(data['t'], unit='s'),
-                'open': data['o'],
-                'high': data['h'],
-                'low': data['l'],
-                'close': data['c'],
-                'volume': data['v'] if 'v' in data else [0] * len(data['t'])
-            })
+            for chunk in range(total_chunks):
+                chunk_start_hours = chunk * chunk_size_hours
+                chunk_end_hours = min((chunk + 1) * chunk_size_hours, hours_back)
+                
+                # Calculate timestamps for this chunk
+                end_time = current_time - (chunk_start_hours * 3600)
+                start_time = current_time - (chunk_end_hours * 3600)
+                
+                # API parameters
+                params = {
+                    'symbol': self.symbol,
+                    'resolution': '5',  # 5-minute intervals
+                    'from': start_time,
+                    'to': end_time
+                }
+                
+                print(f"   Fetching chunk {chunk + 1}/{total_chunks} ({chunk_start_hours}-{chunk_end_hours} hours back)...")
+                
+                response = requests.get(self.api_base_url, params=params, timeout=30)
+                response.raise_for_status()
+                
+                data = response.json()
+                
+                if data['s'] != 'ok':
+                    print(f"⚠️ API returned error status for chunk {chunk + 1}: {data['s']}")
+                    continue
+                
+                # Convert to DataFrame
+                chunk_df = pd.DataFrame({
+                    'timestamp': pd.to_datetime(data['t'], unit='s'),
+                    'open': data['o'],
+                    'high': data['h'],
+                    'low': data['l'],
+                    'close': data['c'],
+                    'volume': data['v'] if 'v' in data else [0] * len(data['t'])
+                })
+                
+                # Remove any invalid data
+                chunk_df = chunk_df.dropna()
+                chunk_df = chunk_df[chunk_df['close'] > 0]
+                
+                if len(chunk_df) > 0:
+                    all_data.append(chunk_df)
+                    print(f"   ✅ Got {len(chunk_df)} data points for chunk {chunk + 1}")
+                
+                # Small delay to avoid rate limiting
+                time.sleep(0.5)
             
-            # Remove any invalid data
-            df = df.dropna()
-            df = df[df['close'] > 0]
+            if not all_data:
+                raise Exception("No data received from any chunk")
             
-            print(f"✅ Fetched {len(df)} data points for {self.crypto_symbol}")
+            # Combine all chunks
+            df = pd.concat(all_data, ignore_index=True)
+            
+            # Remove duplicates and sort
+            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
+            
+            print(f"✅ Fetched {len(df)} total data points for {self.crypto_symbol}")
+            print(f"   Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
+            
             return df
             
         except Exception as e:
@@ -201,12 +235,12 @@ class EnhancedContinuousCryptoPredictor:
                 'error': str(e)
             }
     
-    def fetch_realtime_data(self, hours_back: int = 120) -> pd.DataFrame:
+    def fetch_realtime_data(self, hours_back: int = 720) -> pd.DataFrame:
         """
         Fetch real-time data for prediction.
         
         Args:
-            hours_back: Number of hours of historical data to fetch
+            hours_back: Number of hours of historical data to fetch (default: 720 = 30 days)
             
         Returns:
             DataFrame with OHLCV data
