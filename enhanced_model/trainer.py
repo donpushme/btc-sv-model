@@ -284,7 +284,7 @@ class EnhancedCryptoVolatilityTrainer:
         print("⚙️ Initializing optimizer and criterion...")
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.LEARNING_RATE)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=5, verbose=True
+            optimizer, mode='min', factor=0.5, patience=5
         )
         criterion = EnhancedVolatilityLoss()
         print("✅ Optimizer and criterion initialized")
