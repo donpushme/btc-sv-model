@@ -127,6 +127,8 @@ class EnhancedContinuousCryptoPredictor:
             chunk_size_hours = 100  # API limit
             total_chunks = (hours_back + chunk_size_hours - 1) // chunk_size_hours
             
+            print(f"Fetching {self.crypto_symbol} data: {hours_back} hours in {total_chunks} chunks")
+            
             for chunk in range(total_chunks):
                 start_hours = chunk * chunk_size_hours
                 end_hours = min((chunk + 1) * chunk_size_hours, hours_back)
@@ -143,9 +145,18 @@ class EnhancedContinuousCryptoPredictor:
                     'to': end_time
                 }
                 
-                # Make API request
-                response = requests.get(self.api_base_url, params=params, timeout=30)
-                response.raise_for_status()
+                # Make API request with retry logic
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        response = requests.get(self.api_base_url, params=params, timeout=30)
+                        response.raise_for_status()
+                        break
+                    except Exception as e:
+                        if attempt == max_retries - 1:
+                            print(f"API request failed for {self.crypto_symbol} chunk {chunk}: {str(e)}")
+                            continue
+                        time.sleep(1)  # Wait before retry
                 
                 data = response.json()
                 
@@ -164,8 +175,13 @@ class EnhancedContinuousCryptoPredictor:
                     chunk_df['timestamp'] = pd.to_datetime(chunk_df['timestamp'], unit='s')
                     chunk_df = chunk_df.sort_values('timestamp').reset_index(drop=True)
                     
+                    # Remove any invalid data
+                    chunk_df = chunk_df.dropna()
+                    chunk_df = chunk_df[chunk_df['close'] > 0]
+                    
                     if len(chunk_df) > 0:
                         all_data.append(chunk_df)
+                        print(f"Chunk {chunk + 1}: Got {len(chunk_df)} data points")
                 
                 # Small delay between requests
                 time.sleep(0.5)
@@ -176,6 +192,16 @@ class EnhancedContinuousCryptoPredictor:
             # Combine all chunks
             df = pd.concat(all_data, ignore_index=True)
             df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
+            
+            print(f"Total data points for {self.crypto_symbol}: {len(df)}")
+            
+            # Ensure we have enough data points
+            if len(df) < 500:  # Need at least 500 points for proper prediction
+                print(f"Warning: Only {len(df)} data points received for {self.crypto_symbol}, trying to fetch more data")
+                # Try to fetch more data with a larger time range
+                extended_df = self.fetch_crypto_data_from_api(hours_back * 2)
+                if len(extended_df) > len(df):
+                    df = extended_df
             
             return df
             
@@ -230,7 +256,22 @@ class EnhancedContinuousCryptoPredictor:
         Returns:
             DataFrame with OHLCV data
         """
-        return self.fetch_crypto_data_from_api(hours_back)
+        # Try multiple time ranges to ensure we get enough data
+        time_ranges = [hours_back, hours_back * 2, hours_back * 4]  # Try 30 days, 60 days, 120 days
+        
+        for time_range in time_ranges:
+            df = self.fetch_crypto_data_from_api(time_range)
+            
+            # If we have enough data, return it
+            if len(df) >= 1000:
+                return df
+            elif len(df) >= 500:
+                print(f"Got {len(df)} data points for {self.crypto_symbol}, using this data")
+                return df
+        
+        # If we still don't have enough data, return whatever we have
+        print(f"Warning: Only got {len(df)} data points for {self.crypto_symbol} after trying multiple time ranges")
+        return df
 
     def generate_288_predictions(self, price_data: pd.DataFrame) -> Dict:
         """

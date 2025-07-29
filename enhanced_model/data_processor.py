@@ -135,7 +135,6 @@ class EnhancedCryptoDataProcessor:
         Calculate future volatility, skewness, and kurtosis as targets.
         prediction_horizon: number of future periods to calculate statistics for
         """
-        print(f"Calculating target statistics with prediction_horizon={prediction_horizon}")
         
         # Initialize target columns
         df['target_volatility'] = np.nan
@@ -144,7 +143,7 @@ class EnhancedCryptoDataProcessor:
         
         # For limited data, use a much shorter prediction horizon
         available_data = len(df)
-        if available_data < prediction_horizon + 100:  # Need at least horizon + 100 points for safety
+        if available_data < prediction_horizon + 50:  # Reduced from 100 to 50 for more lenient threshold
             # If we have very limited data, use a much shorter horizon
             adaptive_horizon = max(6, min(available_data // 4, 24))  # Between 6 and 24 periods
             print(f"⚠️ Limited data ({available_data} points). Using adaptive prediction horizon: {adaptive_horizon}")
@@ -215,11 +214,6 @@ class EnhancedCryptoDataProcessor:
         df['target_volatility'] = df['target_volatility'].fillna(0.02)  # 2% volatility
         df['target_skewness'] = df['target_skewness'].fillna(0.0)  # No skew
         df['target_kurtosis'] = df['target_kurtosis'].fillna(0.0)  # Normal kurtosis
-        
-        print(f"Target statistics calculated. Sample values:")
-        print(f"  Volatility sample: {df['target_volatility'].dropna().head(3).tolist()}")
-        print(f"  Skewness sample: {df['target_skewness'].dropna().head(3).tolist()}")
-        print(f"  Kurtosis sample: {df['target_kurtosis'].dropna().head(3).tolist()}")
         
         return df
     

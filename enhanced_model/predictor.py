@@ -49,9 +49,9 @@ class EnhancedRealTimeVolatilityPredictor:
             True if model loaded successfully, False otherwise
         """
         try:
-            # Look for enhanced model
-            model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_model.pth")
-            feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_enhanced_feature_engineer.pkl")
+            # Look for enhanced model (without 'enhanced_' prefix)
+            model_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_model.pth")
+            feature_engineer_path = os.path.join(self.config.MODEL_SAVE_PATH, f"{self.crypto_symbol}_feature_engineer.pkl")
             
             if not os.path.exists(model_path):
                 print(f"Enhanced model not found: {model_path}")
@@ -170,11 +170,21 @@ class EnhancedRealTimeVolatilityPredictor:
             # Remove NaN values
             df = df.dropna().reset_index(drop=True)
             
-            if len(df) < self.config.SEQUENCE_LENGTH:
-                raise ValueError(f"Insufficient data: {len(df)} < {self.config.SEQUENCE_LENGTH}")
+            # Handle limited data by adjusting sequence length
+            available_data = len(df)
+            required_sequence_length = self.config.SEQUENCE_LENGTH
+            
+            if available_data < required_sequence_length:
+                # Use adaptive sequence length for limited data
+                adaptive_sequence_length = max(24, min(available_data - 1, required_sequence_length))
+                print(f"Limited data ({available_data} points). Using adaptive sequence length: {adaptive_sequence_length}")
+                required_sequence_length = adaptive_sequence_length
+            
+            if len(df) < required_sequence_length:
+                raise ValueError(f"Insufficient data: {len(df)} < {required_sequence_length}")
             
             # Get the last sequence
-            last_sequence = df[self.feature_cols].iloc[-self.config.SEQUENCE_LENGTH:].values
+            last_sequence = df[self.feature_cols].iloc[-required_sequence_length:].values
             
             # Transform features
             last_sequence_scaled = self.feature_engineer.feature_scaler.transform(last_sequence)
@@ -211,7 +221,8 @@ class EnhancedRealTimeVolatilityPredictor:
                 'current_price': current_price,
                 'prediction_time': datetime.now().isoformat(),
                 'risk_level': risk_level,
-                'model_type': 'enhanced'
+                'model_type': 'enhanced',
+                'confidence': 0.8 if available_data >= self.config.SEQUENCE_LENGTH else 0.6
             }
             
         except Exception as e:
