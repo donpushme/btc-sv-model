@@ -85,18 +85,24 @@ class MarketRegimeDetector(nn.Module):
         ])
         
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Detect regime probabilities
-        regime_probs = self.regime_classifier(x)
+        batch_size, seq_len, hidden_size = x.shape
+        
+        # Detect regime probabilities for each timestep
+        regime_probs = self.regime_classifier(x)  # (batch, seq_len, num_regimes)
         
         # Process features for each regime
         regime_features = []
         for i, processor in enumerate(self.regime_processors):
-            regime_feat = processor(x)
+            regime_feat = processor(x)  # (batch, seq_len, hidden_size//2)
             regime_features.append(regime_feat)
         
+        # Stack regime features
+        regime_features = torch.stack(regime_features, dim=2)  # (batch, seq_len, num_regimes, features)
+        
         # Weighted combination of regime features
-        regime_features = torch.stack(regime_features, dim=1)  # (batch, num_regimes, features)
-        weighted_features = torch.sum(regime_features * regime_probs.unsqueeze(-1), dim=1)
+        # regime_probs: (batch, seq_len, num_regimes)
+        # regime_features: (batch, seq_len, num_regimes, features)
+        weighted_features = torch.sum(regime_features * regime_probs.unsqueeze(-1), dim=2)  # (batch, seq_len, features)
         
         return weighted_features, regime_probs
 
