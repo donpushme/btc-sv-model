@@ -150,12 +150,22 @@ class MultiScaleProcessor(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Reshape for 1D convolution
         x_conv = x.transpose(1, 2)  # (batch, features, seq_len)
+        batch_size, features, seq_len = x_conv.shape
         
         # Process at different scales
         short = self.short_term(x_conv)
         medium = self.medium_term(x_conv)
         long = self.long_term(x_conv)
         ultra = self.ultra_long_term(x_conv)
+        
+        # Ensure all outputs have the same sequence length by padding or truncating
+        target_seq_len = min(short.shape[2], medium.shape[2], long.shape[2], ultra.shape[2])
+        
+        # Truncate all outputs to the same length
+        short = short[:, :, :target_seq_len]
+        medium = medium[:, :, :target_seq_len]
+        long = long[:, :, :target_seq_len]
+        ultra = ultra[:, :, :target_seq_len]
         
         # Concatenate multi-scale features
         multi_scale = torch.cat([short, medium, long, ultra], dim=1)
