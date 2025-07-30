@@ -78,7 +78,7 @@ class MarketRegimeDetector(nn.Module):
         # Regime-specific processing
         self.regime_processors = nn.ModuleList([
             nn.Sequential(
-                nn.Linear(hidden_size, hidden_size // 2),
+                nn.Linear(hidden_size, hidden_size),
                 nn.ReLU(),
                 nn.Dropout(0.1)
             ) for _ in range(num_regimes)
@@ -93,7 +93,7 @@ class MarketRegimeDetector(nn.Module):
         # Process features for each regime
         regime_features = []
         for i, processor in enumerate(self.regime_processors):
-            regime_feat = processor(x)  # (batch, seq_len, hidden_size//2)
+            regime_feat = processor(x)  # (batch, seq_len, hidden_size)
             regime_features.append(regime_feat)
         
         # Stack regime features
