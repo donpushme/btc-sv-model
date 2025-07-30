@@ -191,14 +191,8 @@ class RealisticModelTrainer:
         """
         print(f"🏗️ Creating realistic model with input size {input_size}...")
         
-        # Create a temporary config with the correct input size
-        temp_config = type(self.config)()
-        temp_config.INPUT_SIZE = input_size
-        temp_config.HIDDEN_SIZE = self.config.HIDDEN_SIZE
-        temp_config.NUM_LAYERS = self.config.NUM_LAYERS
-        temp_config.DROPOUT = self.config.DROPOUT
-        
-        self.model = create_realistic_enhanced_model(temp_config)
+        # Create model with correct input size
+        self.model = create_realistic_enhanced_model(self.config, input_size)
         self.model = self.model.to(self.device)
         
         # Initialize optimizer

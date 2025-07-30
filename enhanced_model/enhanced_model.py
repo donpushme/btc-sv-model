@@ -522,15 +522,18 @@ class RealisticLoss(nn.Module):
         
         return total_loss, loss_components
 
-def create_realistic_enhanced_model(config) -> RealisticEnhancedModel:
+def create_realistic_enhanced_model(config, input_size: int = None) -> RealisticEnhancedModel:
     """Create realistic enhanced model for cryptocurrency prediction."""
+    # Use provided input_size or fall back to config
+    actual_input_size = input_size if input_size is not None else config.INPUT_SIZE
+    
     model = RealisticEnhancedModel(
-        input_size=config.INPUT_SIZE,
+        input_size=actual_input_size,
         hidden_size=config.HIDDEN_SIZE,
         num_layers=config.NUM_LAYERS,
         num_heads=8,
         dropout=config.DROPOUT
     )
     
-    print(f"Realistic enhanced model created with {sum(p.numel() for p in model.parameters()):,} parameters")
+    print(f"Realistic enhanced model created with input_size={actual_input_size} and {sum(p.numel() for p in model.parameters()):,} parameters")
     return model 
