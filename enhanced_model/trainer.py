@@ -211,7 +211,7 @@ class RealisticModelTrainer:
         
         print(f"✅ Model created with {sum(p.numel() for p in self.model.parameters()):,} parameters")
     
-    def train_epoch(self, train_loader: DataLoader, time_train_loader: DataLoader = None) -> tuple:
+    def train_epoch(self, train_loader: DataLoader) -> tuple:
         """
         Train for one epoch with time-aware features.
         """
@@ -219,14 +219,17 @@ class RealisticModelTrainer:
         total_loss = 0
         total_metrics = {'volatility_mse': 0, 'skewness_mse': 0, 'kurtosis_mse': 0}
         
-        for batch_idx, (data, targets) in enumerate(train_loader):
-            data = data.to(self.device)
-            targets = targets.to(self.device)
-            
-            # Get time features if available
-            time_features = None
-            if time_train_loader is not None:
-                time_features = next(time_train_loader).to(self.device)
+        for batch_idx, batch_data in enumerate(train_loader):
+            if len(batch_data) == 3:
+                data, targets, time_features = batch_data
+                data = data.to(self.device)
+                targets = targets.to(self.device)
+                time_features = time_features.to(self.device)
+            else:
+                data, targets = batch_data
+                data = data.to(self.device)
+                targets = targets.to(self.device)
+                time_features = None
             
             # Forward pass
             self.optimizer.zero_grad()
@@ -263,7 +266,7 @@ class RealisticModelTrainer:
         
         return avg_loss, avg_metrics
     
-    def validate_epoch(self, val_loader: DataLoader, time_val_loader: DataLoader = None) -> tuple:
+    def validate_epoch(self, val_loader: DataLoader) -> tuple:
         """
         Validate for one epoch with time-aware features.
         """
@@ -272,14 +275,17 @@ class RealisticModelTrainer:
         total_metrics = {'volatility_mse': 0, 'skewness_mse': 0, 'kurtosis_mse': 0}
         
         with torch.no_grad():
-            for data, targets in val_loader:
-                data = data.to(self.device)
-                targets = targets.to(self.device)
-                
-                # Get time features if available
-                time_features = None
-                if time_val_loader is not None:
-                    time_features = next(time_val_loader).to(self.device)
+            for batch_data in val_loader:
+                if len(batch_data) == 3:
+                    data, targets, time_features = batch_data
+                    data = data.to(self.device)
+                    targets = targets.to(self.device)
+                    time_features = time_features.to(self.device)
+                else:
+                    data, targets = batch_data
+                    data = data.to(self.device)
+                    targets = targets.to(self.device)
+                    time_features = None
                 
                 # Forward pass
                 predictions = self.model(data, time_features)
@@ -325,15 +331,6 @@ class RealisticModelTrainer:
         train_loader = DataLoader(train_dataset, batch_size=self.config.BATCH_SIZE, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=self.config.BATCH_SIZE, shuffle=False)
         
-        # Create time feature loaders if available
-        time_train_loader = None
-        time_val_loader = None
-        if time_train is not None:
-            time_train_dataset = torch.utils.data.TensorDataset(torch.FloatTensor(time_train))
-            time_val_dataset = torch.utils.data.TensorDataset(torch.FloatTensor(time_val))
-            time_train_loader = DataLoader(time_train_dataset, batch_size=self.config.BATCH_SIZE, shuffle=True)
-            time_val_loader = DataLoader(time_val_dataset, batch_size=self.config.BATCH_SIZE, shuffle=False)
-        
         # Training loop
         best_val_loss = float('inf')
         patience_counter = 0
@@ -342,10 +339,10 @@ class RealisticModelTrainer:
             print(f"\n📊 Epoch {epoch+1}/{self.config.NUM_EPOCHS}")
             
             # Train
-            train_loss, train_metrics = self.train_epoch(train_loader, time_train_loader)
+            train_loss, train_metrics = self.train_epoch(train_loader)
             
             # Validate
-            val_loss, val_metrics = self.validate_epoch(val_loader, time_val_loader)
+            val_loss, val_metrics = self.validate_epoch(val_loader)
             
             # Update scheduler
             self.scheduler.step(val_loss)
