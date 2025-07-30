@@ -136,12 +136,16 @@ class RealisticModelTrainer:
         )
         
         # Extract time features for the sequences
+        print("⏰ Extracting time features...")
         time_features = self.extract_time_features(df_transformed, X.shape[0])
+        print(f"✅ Time features extracted: {time_features.shape if time_features is not None else 'None'}")
         
         # Create train-validation split
+        print("🔄 Creating train-validation split...")
         result = create_train_val_split(
             X, y, time_features, self.config.VALIDATION_SPLIT
         )
+        print(f"✅ Train-validation split created")
         
         if time_features is not None:
             X_train, X_val, y_train, y_val, time_train, time_val = result
@@ -161,17 +165,23 @@ class RealisticModelTrainer:
         """
         Extract time features for the sequences.
         """
+        print(f"🔍 Checking for time features in columns: {[col for col in df.columns if 'hour' in col]}")
+        
         if 'hour_sin' not in df.columns or 'hour_cos' not in df.columns:
             print("⚠️ No time features found, skipping time-aware training")
             return None
         
-        # Extract time features for the sequences
-        time_features = []
-        for i in range(self.config.SEQUENCE_LENGTH, len(df)):
-            seq_time_features = df[['hour_sin', 'hour_cos']].iloc[i-self.config.SEQUENCE_LENGTH:i].values
-            time_features.append(seq_time_features)
+        print(f"🔄 Extracting time features for {n_sequences} sequences...")
+        # Extract time features for the sequences using vectorized operations
+        time_data = df[['hour_sin', 'hour_cos']].values
         
-        time_features = np.array(time_features)
+        # Pre-allocate array
+        time_features = np.zeros((n_sequences, self.config.SEQUENCE_LENGTH, 2))
+        
+        # Use vectorized operations to create sequences
+        for i in range(self.config.SEQUENCE_LENGTH):
+            time_features[:, i, :] = time_data[i:n_sequences + i]
+        
         print(f"⏰ Extracted time features: {time_features.shape}")
         return time_features
     
@@ -181,7 +191,14 @@ class RealisticModelTrainer:
         """
         print(f"🏗️ Creating realistic model with input size {input_size}...")
         
-        self.model = create_realistic_enhanced_model(self.config)
+        # Create a temporary config with the correct input size
+        temp_config = type(self.config)()
+        temp_config.INPUT_SIZE = input_size
+        temp_config.HIDDEN_SIZE = self.config.HIDDEN_SIZE
+        temp_config.NUM_LAYERS = self.config.NUM_LAYERS
+        temp_config.DROPOUT = self.config.DROPOUT
+        
+        self.model = create_realistic_enhanced_model(temp_config)
         self.model = self.model.to(self.device)
         
         # Initialize optimizer
@@ -319,8 +336,9 @@ class RealisticModelTrainer:
         """
         print(f"🚀 Starting realistic model training...")
         
-        # Create model
+        # Create model with correct input size
         input_size = X_train.shape[2]
+        print(f"🏗️ Creating model with input size: {input_size}")
         self.create_model(input_size)
         
         # Create datasets
