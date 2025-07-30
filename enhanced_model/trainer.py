@@ -139,15 +139,13 @@ class RealisticModelTrainer:
         time_features = self.extract_time_features(df_transformed, X.shape[0])
         
         # Create train-validation split
+        result = create_train_val_split(
+            X, y, time_features, self.config.VALIDATION_SPLIT
+        )
+        
         if time_features is not None:
-            result = create_train_val_split(
-                X, y, time_features, self.config.VALIDATION_SPLIT
-            )
             X_train, X_val, y_train, y_val, time_train, time_val = result
         else:
-            result = create_train_val_split(
-                X, y, validation_split=self.config.VALIDATION_SPLIT
-            )
             X_train, X_val, y_train, y_val = result
             time_train, time_val = None, None
         
