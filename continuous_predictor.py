@@ -633,17 +633,23 @@ class ContinuousCryptoPredictor:
                 fallback_to_all=True  # Fallback to all available data if recent data is insufficient
             )
             
-            # 🔧 NUMERICAL VALIDATION OF TRAINING DATA
+            # 🔧 COMPREHENSIVE NUMERICAL VALIDATION OF TRAINING DATA
             if training_data is not None and len(training_data) > 0:
+                print(f"🔧 Starting comprehensive numerical validation of {len(training_data)} training data points...")
+                
                 # Check for infinite or NaN values in training data
                 numeric_columns = training_data.select_dtypes(include=[np.number]).columns
+                
+                # Step 1: Replace infinite values with NaN
                 for col in numeric_columns:
                     if col == 'timestamp':
                         continue
-                    # Replace infinite values with NaN
-                    training_data[col] = training_data[col].replace([np.inf, -np.inf], np.nan)
+                    inf_count = np.isinf(training_data[col]).sum()
+                    if inf_count > 0:
+                        print(f"⚠️ Found {inf_count} infinite values in column '{col}', replacing with NaN")
+                        training_data[col] = training_data[col].replace([np.inf, -np.inf], np.nan)
                 
-                # Remove rows with NaN values
+                # Step 2: Remove rows with NaN values
                 initial_rows = len(training_data)
                 training_data = training_data.dropna().reset_index(drop=True)
                 final_rows = len(training_data)
@@ -651,10 +657,13 @@ class ContinuousCryptoPredictor:
                 if final_rows < initial_rows:
                     print(f"⚠️ Removed {initial_rows - final_rows} rows with infinite/NaN values from training data")
                 
-                # Clip extreme values in training data
+                # Step 3: Clip extreme values in training data
                 for col in numeric_columns:
                     if col == 'timestamp':
                         continue
+                    if col not in training_data.columns:
+                        continue
+                        
                     # Calculate robust statistics
                     q1 = training_data[col].quantile(0.01)
                     q99 = training_data[col].quantile(0.99)
@@ -669,6 +678,25 @@ class ContinuousCryptoPredictor:
                     if clipped_count > 0:
                         training_data[col] = training_data[col].clip(lower=lower_bound, upper=upper_bound)
                         print(f"⚠️ Clipped {clipped_count} extreme values in training data column '{col}'")
+                
+                # Step 4: Final comprehensive cleanup
+                for col in numeric_columns:
+                    if col == 'timestamp':
+                        continue
+                    if col not in training_data.columns:
+                        continue
+                        
+                    # Final check for any remaining problematic values
+                    remaining_inf = np.isinf(training_data[col]).sum()
+                    remaining_nan = training_data[col].isna().sum()
+                    large_values = (np.abs(training_data[col]) > 1e6).sum()
+                    
+                    if remaining_inf > 0 or remaining_nan > 0 or large_values > 0:
+                        print(f"⚠️ Final cleanup for column '{col}': {remaining_inf} inf, {remaining_nan} NaN, {large_values} large values")
+                        training_data[col] = training_data[col].replace([np.inf, -np.inf, np.nan], 0.0)
+                        training_data[col] = training_data[col].clip(-1e6, 1e6)
+                
+                print(f"✅ Numerical validation completed. Final training data shape: {training_data.shape}")
             
             if len(training_data) == 0:
                 print("❌ No training data available for retraining")
@@ -685,18 +713,38 @@ class ContinuousCryptoPredictor:
                 print(f"⚠️ Very limited training data: {len(training_data)} < 5 minimum for retraining")
                 return False
             
-            # 🔧 FINAL VALIDATION BEFORE SAVING TO CSV
+            # 🔧 FINAL COMPREHENSIVE VALIDATION BEFORE SAVING TO CSV
             # Ensure no infinite or NaN values remain
             if training_data is not None and len(training_data) > 0:
+                print(f"🔧 Final comprehensive validation before saving to CSV...")
                 numeric_columns = training_data.select_dtypes(include=[np.number]).columns
+                
                 for col in numeric_columns:
                     if col == 'timestamp':
                         continue
-                    # Final check and replacement
-                    if training_data[col].isnull().any() or np.isinf(training_data[col]).any():
-                        print(f"⚠️ Final cleanup: Replacing problematic values in column '{col}'")
+                    if col not in training_data.columns:
+                        continue
+                        
+                    # Comprehensive final check
+                    inf_count = np.isinf(training_data[col]).sum()
+                    nan_count = training_data[col].isna().sum()
+                    large_count = (np.abs(training_data[col]) > 1e6).sum()
+                    
+                    if inf_count > 0 or nan_count > 0 or large_count > 0:
+                        print(f"⚠️ Final cleanup for column '{col}': {inf_count} inf, {nan_count} NaN, {large_count} large values")
+                        # Replace all problematic values
                         training_data[col] = training_data[col].replace([np.inf, -np.inf], 0.0)
                         training_data[col] = training_data[col].fillna(0.0)
+                        training_data[col] = training_data[col].clip(-1e6, 1e6)
+                
+                # Final verification
+                total_inf = sum(np.isinf(training_data[col]).sum() for col in numeric_columns if col != 'timestamp' and col in training_data.columns)
+                total_nan = sum(training_data[col].isna().sum() for col in numeric_columns if col != 'timestamp' and col in training_data.columns)
+                
+                if total_inf == 0 and total_nan == 0:
+                    print(f"✅ Final validation passed: No infinite or NaN values remaining")
+                else:
+                    print(f"⚠️ Final validation warning: {total_inf} infinite, {total_nan} NaN values still present")
             
             # Save training data to temporary CSV for trainer
             import tempfile
@@ -716,8 +764,17 @@ class ContinuousCryptoPredictor:
                     days_back = 30  # Use recent data for larger datasets
                 
                 # Perform retraining with recent data
-                training_results = self.trainer.retrain_with_current_data(temp_csv, days_back=days_back)
-                success = training_results is not None and training_results.get('success', False)
+                try:
+                    print(f"🔄 Starting retraining with {len(training_data)} data points...")
+                    training_results = self.trainer.retrain_with_current_data(temp_csv, days_back=days_back)
+                    success = training_results is not None and training_results.get('success', False)
+                except Exception as e:
+                    print(f"❌ Error during retraining: {str(e)}")
+                    if "Input X contains infinity or a value too large for dtype('float64')" in str(e):
+                        print(f"🔧 Numerical error detected. This should be resolved by the validation steps above.")
+                        print(f"💡 If this error persists, the data may need additional preprocessing.")
+                    success = False
+                    training_results = {'success': False, 'error': str(e)}
                 
             finally:
                 # Clean up temporary file
