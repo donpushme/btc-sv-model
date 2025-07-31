@@ -501,6 +501,44 @@ print(f"Average volatility: {analytics['average_volatility']:.4f}")
 db.cleanup_old_data()
 ```
 
+### 🧹 Automatic Database Cleanup
+
+The system includes automatic cleanup functionality to manage database storage capacity:
+
+**Features:**
+- **Automatic cleanup** after each save operation
+- **Configurable limits** via environment variables
+- **Maintains minimum records** for retraining and analysis
+- **Manual cleanup** capability for immediate cleanup
+
+**Configuration:**
+```bash
+# In your .env file
+MAX_TRAINING_RECORDS=1000    # Maximum training data records
+MAX_PREDICTION_RECORDS=400   # Maximum prediction records
+```
+
+**Usage:**
+```python
+# Automatic cleanup (happens after each save)
+db.save_prediction(prediction)
+db.save_training_data(data)
+
+# Manual cleanup
+db.manual_cleanup_by_count()
+
+# Check database statistics
+stats = db.get_database_stats()
+print(f"Training records: {stats['training_data_count']}/{stats['training_data_limit']}")
+print(f"Prediction records: {stats['predictions_count']}/{stats['predictions_limit']}")
+```
+
+**Cleanup Behavior:**
+- When training data exceeds 1000 records → deletes oldest records
+- When predictions exceed 400 records → deletes oldest records
+- Always maintains the specified minimum number of records
+- Cleanup is automatic and transparent to the user
+
 **Database Collections:**
 - `predictions`: All volatility predictions with timestamps
 - `training_data`: Historical price data for model retraining  

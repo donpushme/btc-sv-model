@@ -100,6 +100,49 @@ class DatabaseManager:
         except Exception as e:
             print(f"⚠️ Warning: Failed to create indexes: {str(e)}")
     
+    def cleanup_old_records_by_count(self, max_training_records: int = None, max_prediction_records: int = None):
+        """
+        Clean up old records based on count limits while maintaining minimum records.
+        Deletes oldest records when maximum count is exceeded.
+        
+        Args:
+            max_training_records: Maximum number of training data records to keep (default from env)
+            max_prediction_records: Maximum number of prediction records to keep (default from env)
+        """
+        try:
+            # Get limits from environment variables or use defaults
+            if max_training_records is None:
+                max_training_records = int(os.getenv('MAX_TRAINING_RECORDS', '1000'))
+            if max_prediction_records is None:
+                max_prediction_records = int(os.getenv('MAX_PREDICTION_RECORDS', '400'))
+            
+            # Cleanup training data records
+            training_count = self.training_data_collection.count_documents({})
+            if training_count > max_training_records:
+                # Find the oldest records to delete
+                excess_count = training_count - max_training_records
+                oldest_records = self.training_data_collection.find().sort("saved_at", ASCENDING).limit(excess_count)
+                oldest_ids = [record["_id"] for record in oldest_records]
+                
+                if oldest_ids:
+                    result = self.training_data_collection.delete_many({"_id": {"$in": oldest_ids}})
+                    print(f"🧹 Cleaned up {result.deleted_count} old training data records (kept {max_training_records})")
+            
+            # Cleanup prediction records
+            prediction_count = self.predictions_collection.count_documents({})
+            if prediction_count > max_prediction_records:
+                # Find the oldest records to delete
+                excess_count = prediction_count - max_prediction_records
+                oldest_records = self.predictions_collection.find().sort("prediction_timestamp", ASCENDING).limit(excess_count)
+                oldest_ids = [record["_id"] for record in oldest_records]
+                
+                if oldest_ids:
+                    result = self.predictions_collection.delete_many({"_id": {"$in": oldest_ids}})
+                    print(f"🧹 Cleaned up {result.deleted_count} old prediction records (kept {max_prediction_records})")
+                    
+        except Exception as e:
+            print(f"❌ Failed to cleanup old records by count: {str(e)}")
+
     def save_prediction(self, prediction: Dict, model_version: str = None) -> str:
         """
         Save a prediction to the database.
@@ -136,6 +179,9 @@ class DatabaseManager:
             
             # Insert document
             result = self.predictions_collection.insert_one(doc)
+            
+            # Cleanup old records after saving new one
+            self.cleanup_old_records_by_count()
             
             return str(result.inserted_id)
             
@@ -176,6 +222,9 @@ class DatabaseManager:
             result = self.predictions_collection.insert_one(doc)
             print(f"💾 Saved prediction batch to database: {result.inserted_id}")
             
+            # Cleanup old records after saving new one
+            self.cleanup_old_records_by_count()
+            
             return str(result.inserted_id)
             
         except Exception as e:
@@ -213,6 +262,9 @@ class DatabaseManager:
             # Insert document
             result = self.training_data_collection.insert_one(doc)
             print(f"💾 Saved {len(records)} training data records: {result.inserted_id}")
+            
+            # Cleanup old records after saving new one
+            self.cleanup_old_records_by_count()
             
             return str(result.inserted_id)
             
@@ -484,6 +536,27 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"❌ Failed to cleanup old data: {str(e)}")
+
+    def manual_cleanup_by_count(self, max_training_records: int = None, max_prediction_records: int = None):
+        """
+        Manually trigger cleanup based on record count limits.
+        
+        Args:
+            max_training_records: Maximum number of training data records to keep (default from env)
+            max_prediction_records: Maximum number of prediction records to keep (default from env)
+        """
+        # Get limits from environment variables or use defaults
+        if max_training_records is None:
+            max_training_records = int(os.getenv('MAX_TRAINING_RECORDS', '1000'))
+        if max_prediction_records is None:
+            max_prediction_records = int(os.getenv('MAX_PREDICTION_RECORDS', '400'))
+            
+        print(f"🧹 Manual cleanup triggered - Max training: {max_training_records}, Max predictions: {max_prediction_records}")
+        self.cleanup_old_records_by_count(max_training_records, max_prediction_records)
+        
+        # Show updated stats
+        print("\n📊 Database stats after cleanup:")
+        self.get_database_stats()
     
     def get_database_stats(self) -> Dict:
         """
@@ -493,20 +566,41 @@ class DatabaseManager:
             Dict: Database statistics
         """
         try:
+            predictions_count = self.predictions_collection.count_documents({})
+            training_data_count = self.training_data_collection.count_documents({})
+            
+            # Get limits from environment variables
+            max_training_records = int(os.getenv('MAX_TRAINING_RECORDS', '1000'))
+            max_prediction_records = int(os.getenv('MAX_PREDICTION_RECORDS', '400'))
+            
             stats = {
-                "predictions_count": self.predictions_collection.count_documents({}),
-                "training_data_count": self.training_data_collection.count_documents({}),
+                "predictions_count": predictions_count,
+                "training_data_count": training_data_count,
                 "models_count": self.models_collection.count_documents({}),
                 "performance_records_count": self.performance_collection.count_documents({}),
-                "database_size_mb": self.db.command("dbStats")["dataSize"] / (1024 * 1024)
+                "database_size_mb": self.db.command("dbStats")["dataSize"] / (1024 * 1024),
+                "predictions_limit": max_prediction_records,
+                "training_data_limit": max_training_records,
+                "predictions_usage_percent": (predictions_count / max_prediction_records) * 100 if predictions_count > 0 else 0,
+                "training_data_usage_percent": (training_data_count / max_training_records) * 100 if training_data_count > 0 else 0
             }
             
             print("📊 Database Statistics:")
             for key, value in stats.items():
                 if "size_mb" in key:
                     print(f"  {key}: {value:.2f} MB")
+                elif "usage_percent" in key:
+                    print(f"  {key}: {value:.1f}%")
+                elif "limit" in key:
+                    print(f"  {key}: {value:,}")
                 else:
                     print(f"  {key}: {value:,}")
+            
+            # Show cleanup status
+            if predictions_count > max_prediction_records:
+                print(f"  ⚠️ Predictions exceed limit: {predictions_count} > {max_prediction_records}")
+            if training_data_count > max_training_records:
+                print(f"  ⚠️ Training data exceeds limit: {training_data_count} > {max_training_records}")
             
             return stats
             
@@ -593,6 +687,10 @@ PREDICTION_RETENTION_DAYS=90
 TRAINING_DATA_RETENTION_DAYS=180
 PERFORMANCE_DATA_RETENTION_DAYS=365
 
+# Record Count Limits (for automatic cleanup)
+MAX_TRAINING_RECORDS=1000
+MAX_PREDICTION_RECORDS=400
+
 # Online Learning Settings
 RETRAIN_INTERVAL_HOURS=24
 MIN_NEW_DATA_POINTS=288
@@ -620,11 +718,20 @@ if __name__ == "__main__":
         db_manager = DatabaseManager()
         
         # Get database statistics
+        print("\n📊 Current Database Statistics:")
         stats = db_manager.get_database_stats()
+        
+        # Test cleanup functionality
+        print("\n🧹 Testing cleanup functionality...")
+        db_manager.manual_cleanup_by_count()
         
         # Test basic operations
         print("\n✅ Database manager is working correctly!")
-        print("💡 You can now use it with the real-time predictor")
+        print("💡 Features:")
+        print("  - Automatic cleanup after each save operation")
+        print("  - Maintains max 1000 training records and 400 prediction records")
+        print("  - Manual cleanup available via manual_cleanup_by_count()")
+        print("  - You can now use it with the real-time predictor")
         
         # Close connection
         db_manager.close_connection()

@@ -1,0 +1,765 @@
+[
+    {
+        "miner_uid": 100,
+        "asset": "BTC",
+        "prompt_score": 0,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 2390.0754047528644
+    },
+    {
+        "miner_uid": 45,
+        "asset": "BTC",
+        "prompt_score": 171.49843252841993,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 2561.5738372812843
+    },
+    {
+        "miner_uid": 108,
+        "asset": "BTC",
+        "prompt_score": 610.839059909234,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 3000.9144646620985
+    },
+    {
+        "miner_uid": 106,
+        "asset": "BTC",
+        "prompt_score": 654.7554118296794,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 3044.830816582544
+    },
+    {
+        "miner_uid": 76,
+        "asset": "BTC",
+        "prompt_score": 660.1801266209986,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 3050.255531373863
+    },
+    {
+        "miner_uid": 107,
+        "asset": "BTC",
+        "prompt_score": 663.0281266330294,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 3053.103531385894
+    },
+    {
+        "miner_uid": 101,
+        "asset": "BTC",
+        "prompt_score": 3813.455439614074,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 6203.530844366938
+    },
+    {
+        "miner_uid": 104,
+        "asset": "BTC",
+        "prompt_score": 4003.761630405984,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 6393.837035158848
+    },
+    {
+        "miner_uid": 61,
+        "asset": "BTC",
+        "prompt_score": 7452.2515184573,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 9842.326923210165
+    },
+    {
+        "miner_uid": 63,
+        "asset": "BTC",
+        "prompt_score": 7458.354229939076,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 9848.42963469194
+    },
+    {
+        "miner_uid": 59,
+        "asset": "BTC",
+        "prompt_score": 7517.567442261476,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 9907.64284701434
+    },
+    {
+        "miner_uid": 58,
+        "asset": "BTC",
+        "prompt_score": 7550.413008250545,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 9940.48841300341
+    },
+    {
+        "miner_uid": 60,
+        "asset": "BTC",
+        "prompt_score": 7560.940323221419,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 9951.015727974283
+    },
+    {
+        "miner_uid": 20,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 78,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 81,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 26,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 55,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 66,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 13,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 75,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 105,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 89,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 97,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 57,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 22,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 4,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 21,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 24,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 82,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 98,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 23,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 16,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 87,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 0,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 65,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 67,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 5,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 53,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 12,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 74,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 71,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 46,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 93,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 19,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 41,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 99,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 70,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 56,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 52,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 95,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 73,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 6,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 43,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 51,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 49,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 36,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 8,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 85,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 37,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 50,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 84,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 35,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 38,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 86,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 62,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 10086.101538090605
+    },
+    {
+        "miner_uid": 28,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 88,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 18,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 42,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 54,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 40,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 80,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 72,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 9,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 17,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 96,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 3,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 27,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 39,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 102,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 15,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 77,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 1,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 10,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 68,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 90,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 79,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 103,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 83,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 30,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 48,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 44,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 69,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 14,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 33,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 64,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": 10013.487528552307
+    },
+    {
+        "miner_uid": 31,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 92,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 94,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 32,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 47,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 34,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 29,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 7,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 11,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 2,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 91,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    },
+    {
+        "miner_uid": 25,
+        "asset": "BTC",
+        "prompt_score": 7598.423403568233,
+        "scored_time": "2025-07-30T20:51:00Z",
+        "crps": -1
+    }
+]
