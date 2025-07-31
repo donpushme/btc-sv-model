@@ -633,6 +633,43 @@ class ContinuousCryptoPredictor:
                 fallback_to_all=True  # Fallback to all available data if recent data is insufficient
             )
             
+            # 🔧 NUMERICAL VALIDATION OF TRAINING DATA
+            if training_data is not None and len(training_data) > 0:
+                # Check for infinite or NaN values in training data
+                numeric_columns = training_data.select_dtypes(include=[np.number]).columns
+                for col in numeric_columns:
+                    if col == 'timestamp':
+                        continue
+                    # Replace infinite values with NaN
+                    training_data[col] = training_data[col].replace([np.inf, -np.inf], np.nan)
+                
+                # Remove rows with NaN values
+                initial_rows = len(training_data)
+                training_data = training_data.dropna().reset_index(drop=True)
+                final_rows = len(training_data)
+                
+                if final_rows < initial_rows:
+                    print(f"⚠️ Removed {initial_rows - final_rows} rows with infinite/NaN values from training data")
+                
+                # Clip extreme values in training data
+                for col in numeric_columns:
+                    if col == 'timestamp':
+                        continue
+                    # Calculate robust statistics
+                    q1 = training_data[col].quantile(0.01)
+                    q99 = training_data[col].quantile(0.99)
+                    iqr = training_data[col].quantile(0.75) - training_data[col].quantile(0.25)
+                    
+                    # Define clipping bounds
+                    lower_bound = q1 - 3 * iqr
+                    upper_bound = q99 + 3 * iqr
+                    
+                    # Clip extreme values
+                    clipped_count = ((training_data[col] < lower_bound) | (training_data[col] > upper_bound)).sum()
+                    if clipped_count > 0:
+                        training_data[col] = training_data[col].clip(lower=lower_bound, upper=upper_bound)
+                        print(f"⚠️ Clipped {clipped_count} extreme values in training data column '{col}'")
+            
             if len(training_data) == 0:
                 print("❌ No training data available for retraining")
                 return False
@@ -647,6 +684,19 @@ class ContinuousCryptoPredictor:
             if len(training_data) < 5:  # Reduced from 20 to 5 for retraining with limited data
                 print(f"⚠️ Very limited training data: {len(training_data)} < 5 minimum for retraining")
                 return False
+            
+            # 🔧 FINAL VALIDATION BEFORE SAVING TO CSV
+            # Ensure no infinite or NaN values remain
+            if training_data is not None and len(training_data) > 0:
+                numeric_columns = training_data.select_dtypes(include=[np.number]).columns
+                for col in numeric_columns:
+                    if col == 'timestamp':
+                        continue
+                    # Final check and replacement
+                    if training_data[col].isnull().any() or np.isinf(training_data[col]).any():
+                        print(f"⚠️ Final cleanup: Replacing problematic values in column '{col}'")
+                        training_data[col] = training_data[col].replace([np.inf, -np.inf], 0.0)
+                        training_data[col] = training_data[col].fillna(0.0)
             
             # Save training data to temporary CSV for trainer
             import tempfile

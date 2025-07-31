@@ -534,6 +534,36 @@ class CryptoVolatilityTrainer:
             recent_df_scaled, feature_cols, target_cols, self.config.SEQUENCE_LENGTH
         )
         
+        # 🔧 FINAL NUMERICAL VALIDATION BEFORE TRAINING
+        # Check for infinite or NaN values in X and y
+        if np.isinf(X).any() or np.isnan(X).any():
+            print(f"❌ Error: Input features X contain infinite or NaN values")
+            # Replace problematic values
+            X = np.where(np.isinf(X), 0.0, X)
+            X = np.where(np.isnan(X), 0.0, X)
+            print(f"⚠️ Replaced infinite/NaN values in X with zeros")
+        
+        if np.isinf(y).any() or np.isnan(y).any():
+            print(f"❌ Error: Target values y contain infinite or NaN values")
+            # Replace problematic values
+            y = np.where(np.isinf(y), 0.0, y)
+            y = np.where(np.isnan(y), 0.0, y)
+            print(f"⚠️ Replaced infinite/NaN values in y with zeros")
+        
+        # Check for extremely large values
+        max_abs_X = np.max(np.abs(X))
+        max_abs_y = np.max(np.abs(y))
+        
+        if max_abs_X > 1e6:
+            print(f"⚠️ Warning: Input features X contain very large values (max: {max_abs_X})")
+            X = np.clip(X, -1e6, 1e6)
+            print(f"⚠️ Clipped X values to range [-1e6, 1e6]")
+        
+        if max_abs_y > 1e6:
+            print(f"⚠️ Warning: Target values y contain very large values (max: {max_abs_y})")
+            y = np.clip(y, -1e6, 1e6)
+            print(f"⚠️ Clipped y values to range [-1e6, 1e6]")
+        
         print(f"Recent data sequence shape: X={X.shape}, y={y.shape}")
         
         # Check if we have enough sequences

@@ -232,6 +232,49 @@ class RealTimeVolatilityPredictor:
         # Remove NaN values
         df = df.dropna().reset_index(drop=True)
         
+        # 🔧 NUMERICAL VALIDATION AND CLEANUP
+        # Check for infinite values and replace them
+        numeric_columns = df.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col == 'timestamp':
+                continue
+            # Replace infinite values with NaN
+            df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+        
+        # Remove rows with NaN values after infinity replacement
+        initial_rows = len(df)
+        df = df.dropna().reset_index(drop=True)
+        final_rows = len(df)
+        
+        if final_rows < initial_rows:
+            print(f"⚠️ Removed {initial_rows - final_rows} rows with infinite/NaN values")
+        
+        # Clip extreme values to prevent numerical instability
+        for col in numeric_columns:
+            if col == 'timestamp':
+                continue
+            # Calculate robust statistics
+            q1 = df[col].quantile(0.01)
+            q99 = df[col].quantile(0.99)
+            iqr = df[col].quantile(0.75) - df[col].quantile(0.25)
+            
+            # Define clipping bounds (more conservative than 1% and 99%)
+            lower_bound = q1 - 3 * iqr
+            upper_bound = q99 + 3 * iqr
+            
+            # Clip extreme values
+            clipped_count = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
+            if clipped_count > 0:
+                df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
+                print(f"⚠️ Clipped {clipped_count} extreme values in column '{col}'")
+        
+        # Final check for any remaining problematic values
+        for col in numeric_columns:
+            if col == 'timestamp':
+                continue
+            if df[col].isnull().any() or np.isinf(df[col]).any():
+                print(f"❌ Warning: Column '{col}' still contains NaN or infinite values")
+        
         return df
     
     def predict_next_period(self, price_data: pd.DataFrame, 
@@ -285,6 +328,29 @@ class RealTimeVolatilityPredictor:
         
         # Prepare input sequence
         input_sequence = df_scaled[self.feature_cols].iloc[-self.config.SEQUENCE_LENGTH:].values
+        
+        # 🔧 FINAL NUMERICAL VALIDATION BEFORE MODEL INPUT
+        # Check for any remaining infinite or extremely large values
+        if np.isinf(input_sequence).any():
+            print(f"❌ Error: Input sequence contains infinite values")
+            # Replace infinite values with zeros
+            input_sequence = np.where(np.isinf(input_sequence), 0.0, input_sequence)
+            print(f"⚠️ Replaced infinite values with zeros")
+        
+        if np.isnan(input_sequence).any():
+            print(f"❌ Error: Input sequence contains NaN values")
+            # Replace NaN values with zeros
+            input_sequence = np.where(np.isnan(input_sequence), 0.0, input_sequence)
+            print(f"⚠️ Replaced NaN values with zeros")
+        
+        # Check for extremely large values that might cause numerical issues
+        max_abs_value = np.max(np.abs(input_sequence))
+        if max_abs_value > 1e6:
+            print(f"⚠️ Warning: Input sequence contains very large values (max: {max_abs_value})")
+            # Clip to reasonable range
+            input_sequence = np.clip(input_sequence, -1e6, 1e6)
+            print(f"⚠️ Clipped values to range [-1e6, 1e6]")
+        
         input_tensor = torch.FloatTensor(input_sequence).unsqueeze(0).to(self.device)
         
         # Make prediction
