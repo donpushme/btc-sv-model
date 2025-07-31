@@ -426,6 +426,35 @@ class CryptoVolatilityTrainer:
         processor = CryptoDataProcessor(csv_path, self.crypto_symbol)
         df = processor.load_data()
         
+        # 🔧 AGGRESSIVE NUMERICAL VALIDATION BEFORE ANY PROCESSING
+        print(f"🔧 Starting aggressive numerical validation of raw data...")
+        
+        # Check for any infinite or NaN values in the raw data
+        numeric_columns = df.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col == 'timestamp':
+                continue
+                
+            # Check for infinite values
+            inf_count = np.isinf(df[col]).sum()
+            if inf_count > 0:
+                print(f"⚠️ Found {inf_count} infinite values in raw data column '{col}', replacing with zeros")
+                df[col] = df[col].replace([np.inf, -np.inf], 0.0)
+            
+            # Check for NaN values
+            nan_count = df[col].isna().sum()
+            if nan_count > 0:
+                print(f"⚠️ Found {nan_count} NaN values in raw data column '{col}', replacing with zeros")
+                df[col] = df[col].fillna(0.0)
+            
+            # Check for extremely large values
+            large_count = (np.abs(df[col]) > 1e6).sum()
+            if large_count > 0:
+                print(f"⚠️ Found {large_count} extremely large values in raw data column '{col}', clipping to [-1e6, 1e6]")
+                df[col] = df[col].clip(-1e6, 1e6)
+        
+        print(f"✅ Raw data validation completed. Shape: {df.shape}")
+        
         # For retraining, be more flexible with data requirements
         if len(df) < 100:
             recent_df = df.copy()
@@ -464,6 +493,36 @@ class CryptoVolatilityTrainer:
                 return_windows=return_windows,
                 prediction_horizon=min(self.config.PREDICTION_HORIZON, len(recent_df) // 4)
             )
+            
+            # 🔧 AGGRESSIVE NUMERICAL VALIDATION AFTER PREPROCESSING
+            print(f"🔧 Starting aggressive numerical validation after preprocessing...")
+            
+            # Check for any infinite or NaN values after preprocessing
+            numeric_columns = recent_df.select_dtypes(include=[np.number]).columns
+            for col in numeric_columns:
+                if col == 'timestamp':
+                    continue
+                    
+                # Check for infinite values
+                inf_count = np.isinf(recent_df[col]).sum()
+                if inf_count > 0:
+                    print(f"⚠️ Found {inf_count} infinite values in preprocessed column '{col}', replacing with zeros")
+                    recent_df[col] = recent_df[col].replace([np.inf, -np.inf], 0.0)
+                
+                # Check for NaN values
+                nan_count = recent_df[col].isna().sum()
+                if nan_count > 0:
+                    print(f"⚠️ Found {nan_count} NaN values in preprocessed column '{col}', replacing with zeros")
+                    recent_df[col] = recent_df[col].fillna(0.0)
+                
+                # Check for extremely large values
+                large_count = (np.abs(recent_df[col]) > 1e6).sum()
+                if large_count > 0:
+                    print(f"⚠️ Found {large_count} extremely large values in preprocessed column '{col}', clipping to [-1e6, 1e6]")
+                    recent_df[col] = recent_df[col].clip(-1e6, 1e6)
+            
+            print(f"✅ Preprocessed data validation completed. Shape: {recent_df.shape}")
+            
         except Exception as e:
             print(f"❌ Error during preprocessing: {str(e)}")
             return {
@@ -478,6 +537,34 @@ class CryptoVolatilityTrainer:
         print(f"🔄 Adding engineered features...")
         recent_df = self.feature_engineer.engineer_features(recent_df)
         
+        # 🔧 AGGRESSIVE NUMERICAL VALIDATION AFTER FEATURE ENGINEERING
+        print(f"🔧 Starting aggressive numerical validation after feature engineering...")
+        
+        # Check for any infinite or NaN values after feature engineering
+        numeric_columns = recent_df.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col == 'timestamp':
+                continue
+                
+            # Check for infinite values
+            inf_count = np.isinf(recent_df[col]).sum()
+            if inf_count > 0:
+                print(f"⚠️ Found {inf_count} infinite values in feature engineered column '{col}', replacing with zeros")
+                recent_df[col] = recent_df[col].replace([np.inf, -np.inf], 0.0)
+            
+            # Check for NaN values
+            nan_count = recent_df[col].isna().sum()
+            if nan_count > 0:
+                print(f"⚠️ Found {nan_count} NaN values in feature engineered column '{col}', replacing with zeros")
+                recent_df[col] = recent_df[col].fillna(0.0)
+            
+            # Check for extremely large values
+            large_count = (np.abs(recent_df[col]) > 1e6).sum()
+            if large_count > 0:
+                print(f"⚠️ Found {large_count} extremely large values in feature engineered column '{col}', clipping to [-1e6, 1e6]")
+                recent_df[col] = recent_df[col].clip(-1e6, 1e6)
+        
+        print(f"✅ Feature engineering validation completed. Shape: {recent_df.shape}")
         print(f"📊 After feature engineering: {len(recent_df)} data points")
         
         # Remove any remaining NaN values
@@ -527,6 +614,35 @@ class CryptoVolatilityTrainer:
         # Scale the data
         print(f"🔄 Scaling data...")
         recent_df_scaled = self.feature_engineer.transform_data(recent_df, feature_cols, target_cols)
+        
+        # 🔧 AGGRESSIVE NUMERICAL VALIDATION AFTER SCALING
+        print(f"🔧 Starting aggressive numerical validation after scaling...")
+        
+        # Check for any infinite or NaN values after scaling
+        numeric_columns = recent_df_scaled.select_dtypes(include=[np.number]).columns
+        for col in numeric_columns:
+            if col == 'timestamp':
+                continue
+                
+            # Check for infinite values
+            inf_count = np.isinf(recent_df_scaled[col]).sum()
+            if inf_count > 0:
+                print(f"⚠️ Found {inf_count} infinite values in scaled column '{col}', replacing with zeros")
+                recent_df_scaled[col] = recent_df_scaled[col].replace([np.inf, -np.inf], 0.0)
+            
+            # Check for NaN values
+            nan_count = recent_df_scaled[col].isna().sum()
+            if nan_count > 0:
+                print(f"⚠️ Found {nan_count} NaN values in scaled column '{col}', replacing with zeros")
+                recent_df_scaled[col] = recent_df_scaled[col].fillna(0.0)
+            
+            # Check for extremely large values
+            large_count = (np.abs(recent_df_scaled[col]) > 1e6).sum()
+            if large_count > 0:
+                print(f"⚠️ Found {large_count} extremely large values in scaled column '{col}', clipping to [-1e6, 1e6]")
+                recent_df_scaled[col] = recent_df_scaled[col].clip(-1e6, 1e6)
+        
+        print(f"✅ Scaling validation completed. Shape: {recent_df_scaled.shape}")
         
         # Prepare sequences
         print(f"🔄 Preparing sequences...")
